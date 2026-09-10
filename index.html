@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>당직 및 교대 순환 관제 시스템</title>
+  <title>DC운용3팀 근무표 - 종합 관제 시스템</title>
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -17,34 +18,66 @@
       }
     }
   </script>
+  <!-- React & Babel CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap');
     body { font-family: 'Pretendard', sans-serif; }
+    /* 커스텀 스크롤바 */
+    ::-webkit-scrollbar { height: 8px; width: 8px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
+<body class="bg-[#070b14] text-slate-100 min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useMemo } = React;
+    const { useState, useEffect, useMemo } = React;
 
-    const DEFAULT_MEMBERS = [
+    const INITIAL_MEMBERS = [
       "대원01", "대원02", "대원03", "대원04", "대원05", 
       "대원06", "대원07", "대원08", "대원09", "대원10", 
       "대원11", "대원12", "대원13", "대원14"
     ];
 
-    function ShiftApp() {
-      const [year, setYear] = useState(2026);
-      const [month, setMonth] = useState(10);
-      const [members, setMembers] = useState(DEFAULT_MEMBERS);
-      const [isEditing, setIsEditing] = useState(false);
-      const [memberInput, setMemberInput] = useState(DEFAULT_MEMBERS.join(", "));
+    const STORAGE_KEY = "dc3_team_members_v2";
 
-      // 선택된 월의 전체 일자 계산
+    function App() {
+      const now = new Date();
+      const [year, setYear] = useState(now.getFullYear());
+      const [month, setMonth] = useState(now.getMonth() + 1);
+
+      // 로컬스토리지 연동 (브라우저 영구 저장)
+      const [members, setMembers] = useState(() => {
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+        } catch (e) {
+          console.error("저장소 로드 오류", e);
+        }
+        return INITIAL_MEMBERS;
+      });
+
+      const [isManaging, setIsManaging] = useState(false);
+      const [editNameInput, setEditNameInput] = useState("");
+
+      // 멤버 변경 시 자동 브라우저 로컬 저장
+      useEffect(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
+        } catch (e) {
+          console.error("저장소 기록 실패", e);
+        }
+      }, [members]);
+
+      // 월별 전체 일자 생성
       const daysInMonth = useMemo(() => {
         const days = [];
         const date = new Date(year, month - 1, 1);
@@ -55,45 +88,45 @@
         return days;
       }, [year, month]);
 
-      // 공평 당직 순환 분배 알고리즘
+      // 가변 인원수 맞춤형 당직 자동 편성 알고리즘
       const { schedule, summary } = useMemo(() => {
         const numMembers = members.length;
         const totalDays = daysInMonth.length;
         
-        // 초기화
+        if (numMembers === 0) return { schedule: [], summary: [] };
+
         const sched = Array.from({ length: numMembers }, () => Array(totalDays).fill(''));
 
-        // 주간/야간 당직 포인터 (연속 순환)
-        let dayDutyPointer = 0;
-        let nightDutyPointer = 1;
+        // 공평한 연속 포인터 계산 (전월 누적 형태를 띄도록 월 인덱스 반영)
+        let dayDutyPtr = (month * 3) % numMembers;
+        let nightDutyPtr = (dayDutyPtr + 1) % numMembers;
 
         for (let d = 0; d < totalDays; d++) {
           const currentDay = daysInMonth[d];
           const isWeekend = (currentDay.getDay() === 0 || currentDay.getDay() === 6);
 
-          // 1. 주간 당직 1명 지정
-          // 이전날 야간을 섰던 인원은 다음날 주간 투입 금지
-          if (d > 0 && sched[dayDutyPointer % numMembers][d - 1] === 'N') {
-            dayDutyPointer++;
+          // 1. 주간 당직자 배정 (전날 야간자는 당일 주간 제외)
+          if (d > 0 && sched[dayDutyPtr % numMembers][d - 1] === 'N') {
+            dayDutyPtr++;
           }
-          const dayIdx = dayDutyPointer % numMembers;
-          sched[dayIdx][d] = 'D';
-          dayDutyPointer++;
+          const dIdx = dayDutyPtr % numMembers;
+          sched[dIdx][d] = 'D';
+          dayDutyPtr++;
 
-          // 2. 야간 당직 1명 지정 (당일 주간 당직자와 겹치지 않게)
-          while ((nightDutyPointer % numMembers) === dayIdx) {
-            nightDutyPointer++;
+          // 2. 야간 당직자 배정 (당일 주간 당직자와 절대 중복 금지)
+          while ((nightDutyPtr % numMembers) === dIdx) {
+            nightDutyPtr++;
           }
-          const nightIdx = nightDutyPointer % numMembers;
-          sched[nightIdx][d] = 'N';
-          nightDutyPointer++;
+          const nIdx = nightDutyPtr % numMembers;
+          sched[nIdx][d] = 'N';
+          nightDutyPtr++;
 
-          // 3. 야간 근무자 익일 비번(B) 강제 부여
+          // 3. 야간 근무자 익일 비번(B) 보장
           if (d + 1 < totalDays) {
-            sched[nightIdx][d + 1] = 'B';
+            sched[nIdx][d + 1] = 'B';
           }
 
-          // 4. 나머지 대원 평일 주간(W) 또는 주말 휴무(O) 처리
+          // 4. 나머지 대원 배정: 평일 상근(W) / 주말 휴무(O)
           for (let m = 0; m < numMembers; m++) {
             if (!sched[m][d]) {
               sched[m][d] = isWeekend ? 'O' : 'W';
@@ -101,185 +134,283 @@
           }
         }
 
-        // 대원별 통계 집계
+        // 통계 산출
         const stats = members.map((name, idx) => {
-          let dayDuty = 0, nightDuty = 0, weekendDuty = 0, regularWork = 0, offDays = 0;
+          let dayCount = 0, nightCount = 0, weekendDuty = 0, regularWork = 0, offCount = 0;
           sched[idx].forEach((duty, dIdx) => {
             const isWeekend = (daysInMonth[dIdx].getDay() === 0 || daysInMonth[dIdx].getDay() === 6);
             if (duty === 'D') {
-              dayDuty++;
+              dayCount++;
               if (isWeekend) weekendDuty++;
             } else if (duty === 'N') {
-              nightDuty++;
+              nightCount++;
               if (isWeekend) weekendDuty++;
             } else if (duty === 'W') {
               regularWork++;
             } else if (duty === 'O' || duty === 'B') {
-              offDays++;
+              offCount++;
             }
           });
-          return { name, dayDuty, nightDuty, weekendDuty, regularWork, offDays };
+          return { name, dayCount, nightCount, weekendDuty, regularWork, offCount };
         });
 
         return { schedule: sched, summary: stats };
-      }, [members, daysInMonth]);
+      }, [members, daysInMonth, month]);
 
-      // CSV 다운로드 함수
-      const handleDownloadCSV = () => {
-        let csv = "이름," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간당직,야간당직,주말당직합계,일반근무(09-18),휴무/비번\n";
+      // 인원 관리 핸들러
+      const handleOpenManage = () => {
+        setEditNameInput(members.join(", "));
+        setIsManaging(true);
+      };
+
+      const handleSaveMembers = () => {
+        const parsed = editNameInput.split(",").map(s => s.trim()).filter(Boolean);
+        if (parsed.length < 3) {
+          alert("주간/야간/비번 연속 유지를 위해 최소 3명 이상의 인원이 필요합니다.");
+          return;
+        }
+        setMembers(parsed);
+        setIsManaging(false);
+      };
+
+      const handleResetDefault = () => {
+        if (confirm("초기 14인 명단으로 초기화하시겠습니까?")) {
+          setMembers(INITIAL_MEMBERS);
+          setEditNameInput(INITIAL_MEMBERS.join(", "));
+        }
+      };
+
+      // CSV 내보내기 (Excel 호환 UTF-8 BOM)
+      const downloadCSV = () => {
+        let csv = "성명," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간(D),야간(N),주말당직합,상근(W),휴무/비번\n";
         members.forEach((name, idx) => {
           const s = summary[idx];
-          csv += `${name},` + schedule[idx].join(",") + `,${s.dayDuty},${s.nightDuty},${s.weekendDuty},${s.regularWork},${s.offDays}\n`;
+          csv += `${name},` + schedule[idx].join(",") + `,${s.dayCount},${s.nightCount},${s.weekendDuty},${s.regularWork},${s.offCount}\n`;
         });
         const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `당직편성표_${year}년_${month}월.csv`;
+        link.download = `DC운용3팀_근무표_${year}년_${month}월.csv`;
         link.click();
       };
 
-      const handleSaveMembers = () => {
-        const parsed = memberInput.split(",").map(s => s.trim()).filter(Boolean);
-        if (parsed.length === 14) {
-          setMembers(parsed);
-          setIsEditing(false);
-        } else {
-          alert(`현재 인원: ${parsed.length}명입니다. 정확히 14명을 입력해 주십시오.`);
-        }
-      };
-
+      // 초시인성 뱃지 디자인
       const getDutyBadge = (duty) => {
         switch (duty) {
-          case 'D': return 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold';
-          case 'N': return 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold';
-          case 'B': return 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium text-[11px]';
-          case 'W': return 'bg-slate-800/80 text-slate-300 border border-slate-700/50 text-[11px]';
-          case 'O': return 'bg-slate-900/40 text-slate-600 border border-slate-800/40 text-[11px]';
-          default: return '';
+          case 'D': // 주간 당직: 태양광 골드 옐로우
+            return 'bg-amber-400 text-slate-950 font-black shadow-lg shadow-amber-500/30 ring-1 ring-amber-300';
+          case 'N': // 야간 당직: 네온 퍼플 인디고
+            return 'bg-indigo-600 text-white font-black shadow-lg shadow-indigo-600/40 ring-1 ring-indigo-400';
+          case 'B': // 비번: 에메랄드 틴트
+            return 'bg-emerald-950/70 text-emerald-400 font-bold border border-emerald-500/50';
+          case 'W': // 일반 평일 상근: 쿨그레이 슬레이트
+            return 'bg-slate-800/80 text-slate-300 font-medium border border-slate-700/60';
+          case 'O': // 주말 완전 휴무: 딥 뮤트
+            return 'bg-[#0b101c] text-slate-600 font-normal border border-slate-900';
+          default:
+            return '';
         }
       };
 
       return (
-        <div className="max-w-[1550px] mx-auto px-4 py-8">
-          {/* Header */}
-          <div className="mb-6 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/50 border border-slate-800 shadow-2xl flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-[1700px] mx-auto px-4 py-6">
+          {/* 최상단 컨트롤 관제 패널 */}
+          <header className="mb-6 p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-[#0d1424] to-indigo-950 border border-slate-800 shadow-2xl flex flex-wrap items-center justify-between gap-5">
             <div>
               <div className="flex items-center gap-3">
-                <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                  사령관 전용 지휘통제기
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black tracking-wider bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
+                  DC INFRA CONTROL
                 </span>
-                <h1 className="text-2xl font-bold tracking-tight text-white">
-                  14인 주·야간 당직 & 상근 자동 스케줄러
-                </h1>
+                <span className="text-xs text-slate-400 bg-slate-800/80 px-2.5 py-1 rounded-lg border border-slate-700">
+                  총원: <strong className="text-indigo-300">{members.length}명</strong>
+                </span>
               </div>
-              <p className="mt-1.5 text-sm text-slate-400">
-                일별 주간(08~19) 1명, 야간(19~08) 1명 자동 지정 · 나머지 평일 상근(09~18) 및 주말 휴무 공평 분배
+              <h1 className="text-3xl font-extrabold tracking-tight text-white mt-2 flex items-center gap-3">
+                DC운용3팀 근무표
+              </h1>
+              <p className="mt-1 text-xs text-slate-400">
+                주간 당직(08~19) 1명 · 야간 당직(19~08) 1명 고정 · 평일 상근(09~18) 및 주말 휴무 100% 자동 균등 분배
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <select
-                value={month}
-                onChange={(e) => setMonth(Number(e.target.value))}
-                className="bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            {/* 컨트롤 액션 바 */}
+            <div className="flex items-center flex-wrap gap-3">
+              {/* 월 선택 드롭다운 */}
+              <div className="flex items-center bg-slate-950/80 border border-slate-700/80 rounded-xl px-2 py-1 shadow-inner">
+                <select 
+                  value={year} 
+                  onChange={(e) => setYear(Number(e.target.value))}
+                  className="bg-transparent text-slate-300 font-bold text-sm px-2 py-1.5 focus:outline-none cursor-pointer"
+                >
+                  <option value={2026} className="bg-slate-900">2026년</option>
+                  <option value={2027} className="bg-slate-900">2027년</option>
+                </select>
+                <div className="w-[1px] h-4 bg-slate-700 mx-1"></div>
+                <select 
+                  value={month} 
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                  className="bg-transparent text-indigo-400 font-extrabold text-sm px-2 py-1.5 focus:outline-none cursor-pointer"
+                >
+                  {[...Array(12)].map((_, i) => (
+                    <option key={i+1} value={i+1} className="bg-slate-900">{i+1}월</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 인원 관리 버튼 */}
+              <button 
+                onClick={handleOpenManage}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-sm font-semibold transition flex items-center gap-2 shadow-sm"
               >
-                {[...Array(12)].map((_, i) => (
-                  <option key={i+1} value={i+1}>{year}년 {i+1}월</option>
-                ))}
-              </select>
-              
-              <button
-                onClick={() => setIsEditing(!isEditing)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-sm font-medium transition"
-              >
-                {isEditing ? '닫기' : '14인 명단 수정'}
+                <svg className="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                근무자 명단 설정
               </button>
 
-              <button
-                onClick={handleDownloadCSV}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/30 transition flex items-center gap-2"
+              {/* CSV 다운로드 버튼 */}
+              <button 
+                onClick={downloadCSV}
+                className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/30 transition flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                 </svg>
-                CSV 엑셀 다운로드
+                엑셀(CSV) 다운로드
               </button>
             </div>
-          </div>
+          </header>
 
-          {/* 명단 수정 패널 */}
-          {isEditing && (
-            <div className="mb-6 p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
-              <h3 className="text-sm font-bold text-slate-300 mb-2">대원 명단 14인 입력 (쉼표로 구분)</h3>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={memberInput}
-                  onChange={(e) => setMemberInput(e.target.value)}
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                <button
-                  onClick={handleSaveMembers}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-sm font-semibold transition"
+          {/* 명단 수정 모달/패널 */}
+          {isManaging && (
+            <div className="mb-6 p-6 rounded-2xl bg-[#0e1628] border-2 border-indigo-500/40 shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white">DC운용3팀 근무자 명단 및 정원 수정</h2>
+                  <span className="text-xs text-indigo-300 bg-indigo-950 px-2 py-0.5 rounded border border-indigo-800">
+                    자동 저장 활성화됨
+                  </span>
+                </div>
+                <button 
+                  onClick={handleResetDefault}
+                  className="text-xs text-rose-400 hover:text-rose-300 underline font-medium"
                 >
-                  반영하기
+                  기본 14인으로 초기화
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+                쉼표(,)로 대원 이름을 구분하여 입력하십시오. 인원수를 10명, 12명, 15명 등으로 늘리거나 줄여도 알고리즘이 자동으로 균등 순환 편성표를 재계산합니다.
+              </p>
+              <textarea
+                rows="3"
+                value={editNameInput}
+                onChange={(e) => setEditNameInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed font-mono"
+                placeholder="홍길동, 김철수, 이영희..."
+              />
+              <div className="flex justify-end gap-3 mt-4">
+                <button 
+                  onClick={() => setIsManaging(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-semibold text-slate-300 transition"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={handleSaveMembers}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-xl text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition"
+                >
+                  영구 저장 및 편성표 즉시 반영
                 </button>
               </div>
             </div>
           )}
 
-          {/* 범례 배너 */}
-          <div className="flex flex-wrap items-center gap-4 mb-4 text-xs">
-            <span className="text-slate-400 font-medium">근무 코드:</span>
-            <span className="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold">D: 주간 당직 (08~19) 1명</span>
-            <span className="px-2.5 py-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-bold">N: 야간 당직 (19~08) 1명</span>
-            <span className="px-2.5 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">B: 야간 비번 (퇴근 휴식)</span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700">W: 일반 주간 (09~18)</span>
-            <span className="px-2.5 py-1 rounded-md bg-slate-900 text-slate-500 border border-slate-800">O: 주말 완전 휴무</span>
+          {/* 초시인성 직관 범례 (Legend) */}
+          <div className="mb-4 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div className="flex flex-wrap items-center gap-4">
+              <span className="text-slate-400 font-bold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span> 근무 구분 식별표:
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-6 flex items-center justify-center rounded bg-amber-400 text-slate-950 font-black text-xs shadow-md">D</span>
+                <span className="text-amber-300 font-bold">주간 당직 (08:00 ~ 19:00) 1명</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-6 flex items-center justify-center rounded bg-indigo-600 text-white font-black text-xs shadow-md">N</span>
+                <span className="text-indigo-300 font-bold">야간 당직 (19:00 ~ 익일 08:00) 1명</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-6 flex items-center justify-center rounded bg-emerald-950 text-emerald-400 font-bold border border-emerald-500/50 text-xs">B</span>
+                <span className="text-emerald-400 font-semibold">비번 (야간 익일 휴식)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-6 flex items-center justify-center rounded bg-slate-800 text-slate-300 font-medium text-xs">W</span>
+                <span className="text-slate-300">평일 상근 (09:00 ~ 18:00)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-7 h-6 flex items-center justify-center rounded bg-[#0b101c] text-slate-600 text-xs border border-slate-800">O</span>
+                <span className="text-slate-500">주말 휴무</span>
+              </div>
+            </div>
+            <div className="text-slate-500 text-[11px]">
+              * 브라우저에 명단 자동 보존 중
+            </div>
           </div>
 
-          {/* 메인 근무표 테이블 */}
-          <div className="overflow-x-auto bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-md">
+          {/* 메인 근무표 뷰어 */}
+          <div className="overflow-x-auto bg-[#0b111e]/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl">
             <table className="w-full text-center border-collapse">
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-950/70 text-slate-400 text-xs">
-                  <th className="py-3 px-3 sticky left-0 bg-slate-950 z-20 font-bold text-slate-200 min-w-[80px]">성명</th>
+                <tr className="border-b border-slate-800 bg-[#070d18] text-slate-400 text-xs">
+                  <th className="py-3 px-3 sticky left-0 bg-[#070d18] z-30 font-black text-slate-200 min-w-[85px] border-r border-slate-800 shadow-md">
+                    성명
+                  </th>
                   {daysInMonth.map((d, i) => {
-                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                    const isSun = d.getDay() === 0;
+                    const isSat = d.getDay() === 6;
+                    const isWeekend = isSun || isSat;
                     return (
-                      <th key={i} className={`py-2 px-1 min-w-[32px] ${isWeekend ? 'text-rose-400 bg-rose-500/5' : 'text-slate-400'}`}>
-                        <div>{d.getDate()}</div>
-                        <div className="text-[10px] font-normal">{['일','월','화','수','목','금','토'][d.getDay()]}</div>
+                      <th 
+                        key={i} 
+                        className={`py-2 px-1 min-w-[34px] border-r border-slate-800/40 ${
+                          isSun ? 'bg-rose-500/10 text-rose-400 font-bold' :
+                          isSat ? 'bg-indigo-500/10 text-indigo-400 font-bold' : 'text-slate-400'
+                        }`}
+                      >
+                        <div className="text-xs leading-none">{d.getDate()}</div>
+                        <div className="text-[10px] mt-0.5 opacity-80">{['일','월','화','수','목','금','토'][d.getDay()]}</div>
                       </th>
                     );
                   })}
-                  <th className="py-3 px-2 text-amber-400 bg-slate-950/50 min-w-[50px]">주간(D)</th>
-                  <th className="py-3 px-2 text-indigo-400 bg-slate-950/50 min-w-[50px]">야간(N)</th>
-                  <th className="py-3 px-2 text-rose-400 bg-slate-950/50 min-w-[50px]">주말당직</th>
-                  <th className="py-3 px-2 text-slate-300 bg-slate-950/50 min-w-[55px]">상근(W)</th>
-                  <th className="py-3 px-2 text-emerald-400 bg-slate-950/50 min-w-[55px]">휴무/비번</th>
+                  {/* 통계 요약 헤더 */}
+                  <th className="py-3 px-2 text-amber-400 bg-amber-950/20 min-w-[55px] font-black">주간(D)</th>
+                  <th className="py-3 px-2 text-indigo-400 bg-indigo-950/20 min-w-[55px] font-black">야간(N)</th>
+                  <th className="py-3 px-2 text-rose-400 bg-rose-950/20 min-w-[60px] font-black">주말당직</th>
+                  <th className="py-3 px-2 text-slate-300 bg-slate-900/60 min-w-[55px] font-bold">상근(W)</th>
+                  <th className="py-3 px-2 text-emerald-400 bg-emerald-950/20 min-w-[60px] font-bold">휴무/비번</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-sm">
+              <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
                 {members.map((name, mIdx) => {
-                  const s = summary[mIdx];
+                  const s = summary[mIdx] || {};
                   return (
-                    <tr key={mIdx} className="hover:bg-slate-800/40 transition">
-                      <td className="py-2.5 px-3 font-semibold text-slate-200 sticky left-0 bg-slate-900 z-10 whitespace-nowrap">
+                    <tr key={mIdx} className="hover:bg-slate-800/30 transition">
+                      <td className="py-2.5 px-3 font-bold text-slate-200 sticky left-0 bg-[#09101d] z-20 whitespace-nowrap border-r border-slate-800 text-left pl-4">
                         {name}
                       </td>
-                      {schedule[mIdx].map((duty, dIdx) => (
-                        <td key={dIdx} className="p-0.5">
-                          <div className={`h-7 w-7 mx-auto flex items-center justify-center rounded-lg transition ${getDutyBadge(duty)}`}>
+                      {schedule[mIdx] && schedule[mIdx].map((duty, dIdx) => (
+                        <td key={dIdx} className="p-0.5 border-r border-slate-800/30">
+                          <div className={`h-7 w-7 mx-auto flex items-center justify-center rounded-lg transition-transform duration-150 hover:scale-110 ${getDutyBadge(duty)}`}>
                             {duty}
                           </div>
                         </td>
                       ))}
-                      <td className="py-2.5 px-2 font-bold text-amber-400/90 text-xs bg-slate-950/30">{s.dayDuty}회</td>
-                      <td className="py-2.5 px-2 font-bold text-indigo-400/90 text-xs bg-slate-950/30">{s.nightDuty}회</td>
-                      <td className="py-2.5 px-2 font-bold text-rose-400/90 text-xs bg-slate-950/30">{s.weekendDuty}회</td>
-                      <td className="py-2.5 px-2 font-medium text-slate-300 text-xs bg-slate-950/30">{s.regularWork}일</td>
-                      <td className="py-2.5 px-2 font-medium text-emerald-400/90 text-xs bg-slate-950/30">{s.offDays}일</td>
+                      <td className="py-2 px-1 font-black text-amber-400 bg-amber-950/10 text-xs">{s.dayCount}회</td>
+                      <td className="py-2 px-1 font-black text-indigo-400 bg-indigo-950/10 text-xs">{s.nightCount}회</td>
+                      <td className="py-2 px-1 font-black text-rose-400 bg-rose-950/10 text-xs">{s.weekendDuty}회</td>
+                      <td className="py-2 px-1 font-medium text-slate-300 bg-slate-900/30 text-xs">{s.regularWork}일</td>
+                      <td className="py-2 px-1 font-semibold text-emerald-400 bg-emerald-950/10 text-xs">{s.offCount}일</td>
                     </tr>
                   );
                 })}
@@ -287,34 +418,34 @@
             </table>
           </div>
 
-          {/* 균등 분배 통계 요약 */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <p className="text-xs text-slate-400 font-semibold">일일 당직 정원</p>
-              <p className="text-lg font-bold text-white mt-1">주간 1명 / 야간 1명</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">인프라 모니터링 무공백 유지</p>
+          {/* 지휘통제 통계 요약 카드 */}
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 shadow-lg">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">편성 부대</span>
+              <p className="text-xl font-black text-white mt-1">DC운용3팀</p>
+              <p className="text-xs text-indigo-400 mt-0.5">현재 등록 대원: {members.length}명 완제</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <p className="text-xs text-slate-400 font-semibold">1인당 월평균 당직</p>
-              <p className="text-lg font-bold text-indigo-400 mt-1">약 2회 ~ 3회</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">14인 기준 당직 부담 최소화</p>
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 shadow-lg">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">주·야간 무결성</span>
+              <p className="text-xl font-black text-emerald-400 mt-1">1일 주1 / 야1</p>
+              <p className="text-xs text-slate-500 mt-0.5">365일 24시간 인프라 무공백 유지</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <p className="text-xs text-slate-400 font-semibold">주말 당직 공평 편차</p>
-              <p className="text-lg font-bold text-rose-400 mt-1">오차 ±1회 이내</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">주말 당직 독점/누락 원천 차단</p>
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 shadow-lg">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">주말 당직 공평 편차</span>
+              <p className="text-xl font-black text-rose-400 mt-1">±1회 이내 수렴</p>
+              <p className="text-xs text-slate-500 mt-0.5">가변 인원 기반 수학적 완전 균등</p>
             </div>
-            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800">
-              <p className="text-xs text-slate-400 font-semibold">야간 근무자 보호</p>
-              <p className="text-lg font-bold text-emerald-400 mt-1">익일 비번(B) 100%</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">야간 직후 주간 투입 원천 차단</p>
+            <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 shadow-lg">
+              <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">대원 피로도 방어</span>
+              <p className="text-xl font-black text-amber-400 mt-1">야간 익일 100% 비번</p>
+              <p className="text-xs text-slate-500 mt-0.5">야간 직후 주간 상근 원천 차단</p>
             </div>
           </div>
         </div>
       );
     }
 
-    ReactDOM.createRoot(document.getElementById('root')).render(<ShiftApp />);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
