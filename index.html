@@ -24,10 +24,9 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // Supabase 관련 코드 전면 삭제 완료 (SQL/DB 설정 일체 불필요)
-    const CLOUD_SYNC_API = "https://api.counterapi.dev/v1/dc3_team_live_vault/members_data";
-    const CACHE_LOCAL_KEY = "dc3_team_members_cache_final";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_final";
+    // 사령관님 전용 Firebase Realtime Database
+    const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_rtdb";
 
     const DEFAULT_MEMBERS = [
       { id: "user01", name: "대원01" }, { id: "user02", name: "대원02" },
@@ -39,7 +38,7 @@
       { id: "user13", name: "대원13" }, { id: "user14", name: "대원14" }
     ];
 
-    // 1. 로그인 화면
+    // 1. 로그인 관제 게이트
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -75,7 +74,7 @@
                 INTEGRATED OPS COMMAND
               </span>
               <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
-              <p className="text-xs text-slate-500 mt-1">14인 교대근무 실시간 동기화 체계</p>
+              <p className="text-xs text-slate-500 mt-1">Firebase Realtime DB 실시간 전 기기 동기화</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -126,52 +125,37 @@
       const [year, setYear] = useState(today.getFullYear());
       const [month, setMonth] = useState(today.getMonth() + 1);
 
-      const [members, setMembers] = useState(() => {
-        try {
-          const cached = localStorage.getItem(CACHE_LOCAL_KEY);
-          if (cached) return JSON.parse(cached);
-        } catch (e) {}
-        return DEFAULT_MEMBERS;
-      });
-
-      const [syncStatus, setSyncStatus] = useState("클라우드 통신 연결됨");
+      const [members, setMembers] = useState(DEFAULT_MEMBERS);
+      const [cloudStatus, setCloudStatus] = useState("Firebase DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
       const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
       const [tempRoster, setTempRoster] = useState(DEFAULT_MEMBERS);
 
-      // 클라우드에서 최신 팀원 데이터 가져오기
-      const fetchCloudData = async () => {
+      // Firebase Realtime DB에서 팀원 명단 실시간 조회
+      const fetchDatabase = async () => {
         setIsLoading(true);
         try {
-          const res = await fetch(`${CLOUD_SYNC_API}/read`, { cache: "no-cache" });
+          const res = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
           if (res.ok) {
-            const result = await res.json();
-            if (result && result.text_payload) {
-              const cloudList = JSON.parse(decodeURIComponent(atob(result.text_payload)));
-              if (Array.isArray(cloudList) && cloudList.length > 0) {
-                setMembers(cloudList);
-                localStorage.setItem(CACHE_LOCAL_KEY, JSON.stringify(cloudList));
-                setSyncStatus("클라우드 실시간 연동 정상 (모든 기기 동기화)");
-                setIsLoading(false);
-                return;
-              }
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+              setMembers(data);
+              setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
+            } else {
+              setCloudStatus("DB 연결됨 (초기 명단 등록 대기)");
             }
+          } else {
+            setCloudStatus("DB 접근 오류: 규칙(Rules) 탭 확인 필요");
           }
         } catch (e) {
-          console.warn("Cloud load fallback");
+          setCloudStatus("DB 통신 실패: 네트워크 상태 확인");
+        } finally {
+          setIsLoading(false);
         }
-
-        // 캐시 데이터가 있으면 유지
-        const cached = localStorage.getItem(CACHE_LOCAL_KEY);
-        if (cached) {
-          setMembers(JSON.parse(cached));
-          setSyncStatus("로컬 및 클라우드 동기화 상태 유지");
-        }
-        setIsLoading(false);
       };
 
       useEffect(() => {
-        fetchCloudData();
+        fetchDatabase();
       }, []);
 
       const daysInMonth = useMemo(() => {
@@ -272,23 +256,28 @@
         setTempRoster(updated);
       };
 
-      // 중앙 클라우드 실시간 동기화 저장 (SQL 일체 불필요)
+      // Firebase Realtime DB에 PUT 방식으로 일괄 영구 저장
       const handleSaveRoster = async () => {
         setIsLoading(true);
-        setMembers(tempRoster);
-        localStorage.setItem(CACHE_LOCAL_KEY, JSON.stringify(tempRoster));
-
         try {
-          const payload = btoa(encodeURIComponent(JSON.stringify(tempRoster)));
-          await fetch(`${CLOUD_SYNC_API}/set?value=1&text_payload=${payload}`, { method: 'GET' });
-          setSyncStatus("클라우드 영구 동기화 완료 (모든 기기 즉시 적용)");
-          alert("14인 팀원 이름이 클라우드에 영구 저장되었습니다!\n다른 어떤 브라우저나 스마트폰으로 접속해도 이 이름이 100% 동일하게 출력됩니다.");
+          const res = await fetch(`${FIREBASE_DB_URL}/members.json`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(tempRoster)
+          });
+
+          if (res.ok) {
+            setMembers(tempRoster);
+            setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
+            alert("Firebase 클라우드 DB에 영구 저장되었습니다!\n다른 어떤 브라우저나 스마트폰으로 접속해도 이 이름이 100% 동일하게 나타납니다.");
+            setIsRosterModalOpen(false);
+          } else {
+            alert("저장 실패: Firebase Console의 Realtime Database -> [규칙(Rules)] 탭에서 read/write가 true인지 확인하십시오.");
+          }
         } catch (err) {
-          setSyncStatus("로컬 및 클라우드 캐시 저장 완료");
-          alert("팀원 명단이 저장되었습니다.");
+          alert("저장 통신 오류: " + err.message);
         } finally {
           setIsLoading(false);
-          setIsRosterModalOpen(false);
         }
       };
 
@@ -327,7 +316,7 @@
                 <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
                   <span>접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong></span>
                   <span className="text-[11px] px-2.5 py-0.5 rounded font-mono border bg-emerald-50 text-emerald-700 border-emerald-200 font-bold">
-                    {syncStatus}
+                    {cloudStatus}
                   </span>
                 </p>
               </div>
@@ -347,10 +336,10 @@
               )}
 
               <button
-                onClick={fetchCloudData}
+                onClick={fetchDatabase}
                 className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl transition flex items-center gap-1.5"
               >
-                🔄 데이터 새로고침
+                🔄 DB 새로고침
               </button>
 
               <button
@@ -362,7 +351,7 @@
             </div>
           </div>
 
-          {/* 대원 개인 맞춤 알림 카드 */}
+          {/* 대원 개인 알림 카드 */}
           {myStat && (
             <div className="mb-6 p-5 rounded-2xl bg-blue-50 border border-blue-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -393,13 +382,13 @@
             </div>
           )}
 
-          {/* 1. 상단 3개 센터 기상 및 외기 관제 */}
+          {/* 1. 상단 3개 센터 기상 정보 */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
                 <span className="text-blue-600">●</span> 3개 거점 센터 기상 & 외기 냉방(Free Cooling) 지수
               </h2>
-              <span className="text-xs text-slate-500">Open-Meteo 실시간 관측 데이터</span>
+              <span className="text-xs text-slate-500">Open-Meteo 실시간 관측</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
@@ -559,7 +548,7 @@
                   <span className="text-blue-600">📅</span> DC운용3팀 월간 전체 종합 근무표
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  14인 가변 자동 분배 · 클라우드 실시간 영구 연동 · CSV 엑셀 출력
+                  14인 가변 자동 분배 · Firebase Realtime DB 실시간 영구 연동 · CSV 엑셀 출력
                 </p>
               </div>
 
@@ -594,7 +583,6 @@
               </div>
             </div>
 
-            {/* 근무 뱃지 안내 */}
             <div className="mb-4 flex flex-wrap items-center gap-3 text-xs">
               <span className="text-slate-500 font-bold">근무 구분:</span>
               <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black">D : 주간 당직 (08~19) 1명</span>
@@ -604,7 +592,6 @@
               <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-400 border border-slate-200">O : 주말 휴무</span>
             </div>
 
-            {/* 테이블 */}
             <div className="overflow-x-auto border border-slate-200 rounded-2xl">
               <table className="w-full text-center border-collapse">
                 <thead>
@@ -673,7 +660,7 @@
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
                   <div>
                     <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                      👥 교대근무 팀원 이름 관리
+                      👥 교대근무 팀원 이름 관리 (Firebase Realtime DB)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
                       수정한 이름은 클라우드에 영구 저장되어 모든 기기 및 브라우저에 실시간 반영됩니다.
@@ -714,7 +701,7 @@
 
                 <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-3">
                   <span className="text-[11px] text-slate-500">
-                    * [클라우드 영구 저장] 클릭 시 전 기기에 즉시 반영됩니다.
+                    * [Firebase DB에 영구 저장] 클릭 시 즉시 전 기기 반영
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -727,7 +714,7 @@
                       onClick={handleSaveRoster}
                       className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-500/20 transition"
                     >
-                      클라우드 영구 저장
+                      Firebase DB에 영구 저장
                     </button>
                   </div>
                 </div>
