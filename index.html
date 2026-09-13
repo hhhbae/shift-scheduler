@@ -3,20 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DC운용3팀 통합 지휘 관제 포털</title>
+  <title>DC운용3팀 통합 지휘 관제 시스템</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & Babel CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Supabase 공식 클라이언트 라이브러리 -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap');
     body { font-family: 'Pretendard', sans-serif; }
     ::-webkit-scrollbar { height: 7px; width: 7px; }
     ::-webkit-scrollbar-track { background: #e2e8f0; }
     ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen antialiased">
@@ -25,29 +26,25 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // 기본 14인 명단
-    const DEFAULT_MEMBERS = [
-      { id: "user01", name: "대원01" },
-      { id: "user02", name: "대원02" },
-      { id: "user03", name: "대원03" },
-      { id: "user04", name: "대원04" },
-      { id: "user05", name: "대원05" },
-      { id: "user06", name: "대원06" },
-      { id: "user07", name: "대원07" },
-      { id: "user08", name: "대원08" },
-      { id: "user09", name: "대원09" },
-      { id: "user10", name: "대원10" },
-      { id: "user11", name: "대원11" },
-      { id: "user12", name: "대원12" },
-      { id: "user13", name: "대원13" },
-      { id: "user14", name: "대원14" }
+    // 사령관님 전용 Supabase 클라우드 DB 정식 결합 완료
+    const SUPABASE_URL = "https://czvntvlguuencsfxxwgb.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_N96KgJtqgSmYzP67GX6SCQ_bYQjISqr";
+
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const DEFAULT_FALLBACK_MEMBERS = [
+      { id: "user01", name: "대원01", seq: 1 }, { id: "user02", name: "대원02", seq: 2 },
+      { id: "user03", name: "대원03", seq: 3 }, { id: "user04", name: "대원04", seq: 4 },
+      { id: "user05", name: "대원05", seq: 5 }, { id: "user06", name: "대원06", seq: 6 },
+      { id: "user07", name: "대원07", seq: 7 }, { id: "user08", name: "대원08", seq: 8 },
+      { id: "user09", name: "대원09", seq: 9 }, { id: "user10", name: "대원10", seq: 10 },
+      { id: "user11", name: "대원11", seq: 11 }, { id: "user12", name: "대원12", seq: 12 },
+      { id: "user13", name: "대원13", seq: 13 }, { id: "user14", name: "대원14", seq: 14 }
     ];
 
-    // 중앙 클라우드 원격 동기화 엔드포인트 키 (DC운용3팀 전용 키)
-    const CLOUD_SYNC_KEY = "dc3_team_roster_shared_v1";
     const AUTH_SESSION_KEY = "dc3_team_session_user";
 
-    // 1. 로그인 게이트웨이
+    // 1. 로그인 화면
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -58,31 +55,21 @@
         const trimmedId = id.trim();
         const trimmedPw = pw.trim();
 
-        // 1) 관리자 로그인
         if (trimmedId === "admin" && (trimmedPw === "1234" || trimmedPw === "")) {
-          const adminUser = { id: "admin", name: "사령관(관리자)", role: "admin" };
+          const adminUser = { id: "admin", name: "총괄 관리자", role: "admin" };
           localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(adminUser));
           onLoginSuccess(adminUser);
           return;
         }
 
-        // 2) 팀원 로그인 (user01 ~ user14)
         if (trimmedId.startsWith("user") && (trimmedPw === "1234" || trimmedPw === "")) {
-          // 캐시된 명단에서 이름 찾기
-          let memberName = trimmedId;
-          try {
-            const cached = JSON.parse(localStorage.getItem(CLOUD_SYNC_KEY) || "[]");
-            const found = cached.find(m => m.id === trimmedId);
-            if (found) memberName = found.name;
-          } catch(e) {}
-
-          const memberUser = { id: trimmedId, name: memberName, role: "member" };
+          const memberUser = { id: trimmedId, name: trimmedId, role: "member" };
           localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(memberUser));
           onLoginSuccess(memberUser);
           return;
         }
 
-        setError("아이디를 확인하십시오. (관리자: admin / 대원: user01 ~ user14 / 초기 암호: 1234)");
+        setError("로그인 정보를 확인하십시오. (관리자: admin / 대원: user01~user14 / 초기 암호: 1234)");
       };
 
       return (
@@ -92,8 +79,8 @@
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black tracking-widest bg-blue-50 text-blue-600 border border-blue-200 mb-3">
                 INTEGRATED OPS COMMAND
               </span>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 통합 관제</h1>
-              <p className="text-xs text-slate-500 mt-1">일산 · 식사 · 양주 센터 14인 순환 근무 체계</p>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
+              <p className="text-xs text-slate-500 mt-1">PostgreSQL 클라우드 DB 실시간 영구 연동</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -125,7 +112,7 @@
                 type="submit"
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2"
               >
-                관제 대시보드 입장
+                관제 대시보드 로그인
               </button>
             </form>
 
@@ -138,54 +125,48 @@
       );
     }
 
-    // 2. 통합 관제 대시보드
+    // 2. 메인 대시보드
     function MainDashboard({ currentUser, onLogout }) {
       const today = new Date();
       const [year, setYear] = useState(today.getFullYear());
       const [month, setMonth] = useState(today.getMonth() + 1);
 
-      // 팀원 명단 상태 (클라우드/로컬 연동)
-      const [members, setMembers] = useState(() => {
-        try {
-          const saved = localStorage.getItem(CLOUD_SYNC_KEY);
-          if (saved) return JSON.parse(saved);
-        } catch (e) {}
-        return DEFAULT_MEMBERS;
-      });
-
-      const [isSyncing, setIsSyncing] = useState(false);
+      const [members, setMembers] = useState(DEFAULT_FALLBACK_MEMBERS);
+      const [isLoading, setIsLoading] = useState(true);
+      const [dbStatus, setDbStatus] = useState("DB 연결 수립 중...");
       const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
-      const [tempRoster, setTempRoster] = useState(DEFAULT_MEMBERS);
+      const [tempRoster, setTempRoster] = useState(DEFAULT_FALLBACK_MEMBERS);
 
-      // 클라우드 중앙 DB(MockAPI/KV) 연동 함수
-      const fetchCloudRoster = async () => {
-        setIsSyncing(true);
+      // 클라우드 DB로부터 팀원 명단 불러오기
+      const loadFromDatabase = async () => {
         try {
-          // 무료 오픈 클라우드 키-밸류 저장소 연동
-          const res = await fetch(`https://api.counterapi.dev/v1/dc3_team_app_sync/${CLOUD_SYNC_KEY}/read`, { cache: 'no-cache' });
-          if (res.ok) {
-            const data = await res.json();
-            if (data && data.text_payload) {
-              const cloudMembers = JSON.parse(decodeURIComponent(atob(data.text_payload)));
-              if (Array.isArray(cloudMembers) && cloudMembers.length > 0) {
-                setMembers(cloudMembers);
-                localStorage.setItem(CLOUD_SYNC_KEY, JSON.stringify(cloudMembers));
-              }
-            }
+          setIsLoading(true);
+          const { data, error } = await supabaseClient
+            .from('dc3_members')
+            .select('*')
+            .order('seq', { ascending: true });
+
+          if (error) throw error;
+
+          if (data && data.length > 0) {
+            setMembers(data);
+            setDbStatus("클라우드 DB 실시간 연결 정상 (Supabase Live)");
+          } else {
+            setDbStatus("DB 테이블 비어있음: 초기 데이터 동기화 대기");
           }
         } catch (err) {
-          // 오프라인이거나 통신 지연 시 기존 로컬 캐시 유지
+          console.error("DB 로드 에러:", err);
+          setDbStatus("DB 통신 대기 중 (기본 데이터 동작)");
         } finally {
-          setIsSyncing(false);
+          setIsLoading(false);
         }
       };
 
-      // 첫 로딩 시 중앙 서버에서 최신 팀원 명단 동기화
       useEffect(() => {
-        fetchCloudRoster();
+        loadFromDatabase();
       }, []);
 
-      // 월별 일자
+      // 월별 날짜 배열
       const daysInMonth = useMemo(() => {
         const days = [];
         const date = new Date(year, month - 1, 1);
@@ -269,42 +250,44 @@
         return { dayWorker, nightWorker, restWorkers, workWorkers, todayDate };
       }, [schedule, members, daysInMonth]);
 
-      // 대원 개인 브리핑
+      // 로그인 대원 개인 맞춤 알림
       const myStat = useMemo(() => {
         if (currentUser.role === 'admin') return null;
         return summary.find(s => s.id === currentUser.id);
       }, [summary, currentUser]);
 
-      // 팀원 이름 관리 모달 열기
+      // 팀원 관리 모달 열기
       const handleOpenRosterModal = () => {
         setTempRoster(JSON.parse(JSON.stringify(members)));
         setIsRosterModalOpen(true);
       };
 
-      // 팀원 이름 개별 변경
       const handleNameChange = (idx, newName) => {
         const updated = [...tempRoster];
         updated[idx].name = newName;
         setTempRoster(updated);
       };
 
-      // 관리자: 팀원 이름 저장 및 중앙 클라우드 실시간 배포
-      const handleSaveRoster = async () => {
-        setMembers(tempRoster);
-        localStorage.setItem(CLOUD_SYNC_KEY, JSON.stringify(tempRoster));
-        setIsRosterModalOpen(false);
-
-        // 중앙 클라우드 서버에 전파
+      // 관리자: PostgreSQL DB에 영구 일괄 저장 (Upsert)
+      const handleSaveRosterToDB = async () => {
         try {
-          const payload = btoa(encodeURIComponent(JSON.stringify(tempRoster)));
-          await fetch(`https://api.counterapi.dev/v1/dc3_team_app_sync/${CLOUD_SYNC_KEY}/set?value=1&text_payload=${payload}`, { method: 'GET' });
-          alert("팀원 이름이 모든 기기 및 브라우저에 실시간 동기화되었습니다!");
-        } catch (e) {
-          alert("로컬 브라우저에 저장되었습니다.");
+          setIsLoading(true);
+          const { error } = await supabaseClient
+            .from('dc3_members')
+            .upsert(tempRoster, { onConflict: 'id' });
+
+          if (error) throw error;
+
+          setMembers(tempRoster);
+          alert("클라우드 DB에 영구 저장되었습니다!\n이제 다른 어떤 컴퓨터나 스마트폰으로 접속해도 이 이름이 100% 동일하게 유지됩니다.");
+          setIsRosterModalOpen(false);
+        } catch (err) {
+          alert("DB 저장 오류: " + err.message + "\n(SQL Editor에서 dc3_members 테이블을 생성했는지 확인하십시오.)");
+        } finally {
+          setIsLoading(false);
         }
       };
 
-      // CSV 다운로드
       const downloadCSV = () => {
         let csv = "성명,아이디," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간(D),야간(N),주말당직합,상근(W),휴무/비번\n";
         members.forEach((m, idx) => {
@@ -331,51 +314,49 @@
 
       return (
         <div className="max-w-[1700px] mx-auto px-4 py-6">
-          {/* 상단 네비게이션 */}
+          {/* 상단 네비게이션 헤더 */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
             <div className="flex items-center gap-3">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className={`w-3 h-3 rounded-full ${isLoading ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></span>
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight">DC운용3팀 통합 지휘 관제 포털</h1>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong> 
-                  {currentUser.role === 'admin' ? " [총괄 관리자]" : " [현장 운용 대원]"}
+                <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
+                  <span>접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong></span>
+                  <span className="text-[11px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded font-mono border border-blue-200">{dbStatus}</span>
                 </p>
               </div>
             </div>
 
             <div className="flex items-center flex-wrap gap-2.5">
-              {/* 관리자 전용: 독립된 팀원 이름 관리 메뉴 버튼 */}
               {currentUser.role === 'admin' && (
                 <button
                   onClick={handleOpenRosterModal}
-                  className="px-3.5 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
+                  className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                   </svg>
-                  👥 팀원 이름 관리
+                  👥 교대근무 팀원 이름 관리 (DB 저장)
                 </button>
               )}
 
               <button
-                onClick={fetchCloudRoster}
-                className="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl transition flex items-center gap-1.5"
+                onClick={loadFromDatabase}
+                className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl transition flex items-center gap-1.5"
               >
-                <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-amber-500 animate-ping' : 'bg-emerald-500'}`}></span>
-                {isSyncing ? "동기화 중..." : "최신 명단 갱신"}
+                🔄 DB 새로고침
               </button>
 
               <button
                 onClick={onLogout}
-                className="px-3 py-2 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition"
+                className="px-3.5 py-2 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition"
               >
                 로그아웃
               </button>
             </div>
           </div>
 
-          {/* 대원 개인 맞춤 알림 카드 */}
+          {/* 대원 맞춤 알림 카드 */}
           {myStat && (
             <div className="mb-6 p-5 rounded-2xl bg-blue-50 border border-blue-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -406,13 +387,13 @@
             </div>
           )}
 
-          {/* 1. 상단 3개 센터 기상 및 외기 냉방 관제 */}
+          {/* 1. 상단 3개 센터 기상 및 외기 관제 */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
                 <span className="text-blue-600">●</span> 3개 거점 센터 기상 & 외기 냉방(Free Cooling) 지수
               </h2>
-              <span className="text-xs text-slate-500">Open-Meteo 관측 데이터</span>
+              <span className="text-xs text-slate-500">Open-Meteo 실시간 관측 데이터</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
@@ -572,7 +553,7 @@
                   <span className="text-blue-600">📅</span> DC운용3팀 월간 전체 종합 근무표
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  14인 가변 자동 분배 · 전 기기 중앙 클라우드 실시간 연동 · CSV 엑셀 출력
+                  14인 가변 자동 분배 · PostgreSQL 클라우드 DB 실시간 영구 연동 · CSV 엑셀 출력
                 </p>
               </div>
 
@@ -679,17 +660,17 @@
             </div>
           </section>
 
-          {/* 전용 모달: 교대근무 팀원 이름 관리 (관리자 전용) */}
+          {/* 관리자 전용: 팀원 명단 DB 저장 모달 */}
           {isRosterModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-2xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
                   <div>
                     <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                      👥 교대근무 팀원 이름 관리
+                      👥 교대근무 팀원 이름 관리 (PostgreSQL DB 영구 저장)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      수정한 이름은 중앙 클라우드에 자동 저장되어 다른 브라우저와 모바일에도 즉시 반영됩니다.
+                      이곳에서 저장한 이름은 클라우드 데이터베이스에 즉시 영구 기록되어 전 기기에 실시간 반영됩니다.
                     </p>
                   </div>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
@@ -697,7 +678,6 @@
                   </span>
                 </div>
 
-                {/* 팀원 명단 편집 테이블 */}
                 <div className="overflow-y-auto flex-1 pr-1 space-y-2">
                   <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 px-3 py-1 bg-slate-50 rounded-lg">
                     <span className="col-span-2">순번</span>
@@ -726,10 +706,9 @@
                   ))}
                 </div>
 
-                {/* 하단 버튼 바 */}
                 <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-3">
                   <span className="text-[11px] text-slate-500">
-                    * [중앙 클라우드 전파 저장]을 누르면 모든 대원 화면에 즉시 동기화됩니다.
+                    * [클라우드 DB에 영구 저장] 클릭 시 즉시 전 기기 반영
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -739,10 +718,10 @@
                       취소
                     </button>
                     <button
-                      onClick={handleSaveRoster}
+                      onClick={handleSaveRosterToDB}
                       className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-500/20 transition"
                     >
-                      중앙 클라우드 전파 저장
+                      클라우드 DB에 영구 저장
                     </button>
                   </div>
                 </div>
@@ -753,7 +732,7 @@
       );
     }
 
-    // 최상위 엔트리 포인트
+    // 최상위 루트
     function Root() {
       const [currentUser, setCurrentUser] = useState(() => {
         try {
