@@ -1,18 +1,17 @@
 <!DOCTYPE html>
-<html lang="ko" class="dark">
+<html lang="ko">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DC운용3팀 통합 지휘 관제 포털</title>
+  <title>DC운용3팀 통합 지휘 관제 시스템</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
           colors: {
-            brand: { 500: '#6366f1', 600: '#4f46e5' }
+            brand: { 500: '#3b82f6', 600: '#2563eb' }
           }
         }
       }
@@ -25,13 +24,13 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700;800;900&display=swap');
     body { font-family: 'Pretendard', sans-serif; }
-    ::-webkit-scrollbar { height: 8px; width: 8px; }
-    ::-webkit-scrollbar-track { background: #060911; }
-    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+    ::-webkit-scrollbar { height: 7px; width: 7px; }
+    ::-webkit-scrollbar-track { background: #e2e8f0; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #64748b; }
   </style>
 </head>
-<body class="bg-[#050811] text-slate-100 min-h-screen antialiased selection:bg-indigo-500 selection:text-white">
+<body class="bg-slate-100 text-slate-800 min-h-screen antialiased">
   <div id="root"></div>
 
   <script type="text/babel">
@@ -43,87 +42,87 @@
       "대원11", "대원12", "대원13", "대원14"
     ];
 
-    const STORAGE_KEY = "dc3_team_members_v3";
-    const AUTH_KEY = "dc3_team_auth_state";
+    const STORAGE_KEY = "dc3_team_members_v4";
+    const AUTH_SESSION_KEY = "dc3_team_auth_session";
+    const CRED_KEY = "dc3_team_credentials";
 
-    // 1. 로그인 인증 게이트웨이 화면
+    // 1. 로그인 인증 게이트
     function LoginScreen({ onLogin }) {
-      const [id, setId] = useState("commander");
+      const [id, setId] = useState("");
       const [pw, setPw] = useState("");
       const [error, setError] = useState("");
 
-      const handleLoginSubmit = (e) => {
+      const handleLogin = (e) => {
         e.preventDefault();
-        // 간이 보안 인증 (기본 패스워드: 1234 또는 자유 입력 허용)
-        if (id.trim()) {
-          localStorage.setItem(AUTH_KEY, "authenticated");
+        const savedCred = JSON.parse(localStorage.getItem(CRED_KEY) || '{"id":"admin","pw":"1234"}');
+        
+        if (id === savedCred.id && pw === savedCred.pw) {
+          localStorage.setItem(AUTH_SESSION_KEY, "authenticated");
           onLogin();
         } else {
-          setError("아이디를 입력해 주십시오.");
+          setError("아이디 또는 비밀번호가 일치하지 않습니다. (기본값: admin / 1234)");
         }
       };
 
       return (
-        <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-[#050811] via-[#091122] to-[#04060d]">
-          <div className="w-full max-w-md p-8 rounded-3xl bg-[#0c1427]/90 border border-slate-800 shadow-2xl backdrop-blur-xl relative overflow-hidden">
-            <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"></div>
-            
+        <div className="min-h-screen flex items-center justify-center px-4 bg-slate-200">
+          <div className="w-full max-w-md p-8 rounded-3xl bg-white border border-slate-300 shadow-2xl relative">
             <div className="text-center mb-8">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black tracking-widest bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 mb-3">
+              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black tracking-widest bg-blue-50 text-blue-600 border border-blue-200 mb-3">
                 INTEGRATED OPS COMMAND
               </span>
-              <h1 className="text-2xl font-black tracking-tight text-white">DC운용3팀 통합 관제</h1>
-              <p className="text-xs text-slate-400 mt-1">일산 · 식사 · 양주 센터 및 교대 통합 포털</p>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
+              <p className="text-xs text-slate-500 mt-1">일산 · 식사 · 양주 센터 통합 운영 체계</p>
             </div>
 
-            <form onSubmit={handleLoginSubmit} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">관제관 ID</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">관제관 ID</label>
                 <input
                   type="text"
                   value={id}
                   onChange={(e) => setId(e.target.value)}
-                  placeholder="아이디를 입력하세요"
-                  className="w-full bg-[#070c18] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  placeholder="아이디 입력 (기본: admin)"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">보안 인가 코드 (PW)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">보안 암호 (PW)</label>
                 <input
                   type="password"
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
-                  placeholder="보안 암호 (미입력 시 즉시 통과)"
-                  className="w-full bg-[#070c18] border border-slate-700/80 rounded-xl px-4 py-3 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  placeholder="비밀번호 입력 (기본: 1234)"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
 
-              {error && <p className="text-xs text-rose-400 font-medium">{error}</p>}
+              {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
 
               <button
                 type="submit"
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm rounded-xl shadow-lg shadow-indigo-600/30 transition duration-200 mt-2"
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2"
               >
                 관제 대시보드 입장
               </button>
             </form>
 
-            <div className="mt-6 text-center">
-              <p className="text-[11px] text-slate-500">인프라 24/7/365 고가용성 보장 시스템</p>
+            <div className="mt-6 text-center text-[11px] text-slate-400">
+              초기 관리자 계정: <strong>admin</strong> / 비밀번호: <strong>1234</strong>
             </div>
           </div>
         </div>
       );
     }
 
-    // 2. 통합 관제 메인 대시보드
+    // 2. 통합 관제 대시보드
     function MainDashboard({ onLogout }) {
       const today = new Date();
       const [year, setYear] = useState(today.getFullYear());
       const [month, setMonth] = useState(today.getMonth() + 1);
 
-      // 근무자 명단 (로컬스토리지 영구 보존)
+      // 근무자 명단 영구 보존
       const [members, setMembers] = useState(() => {
         try {
           const saved = localStorage.getItem(STORAGE_KEY);
@@ -131,21 +130,19 @@
             const parsed = JSON.parse(saved);
             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
           }
-        } catch (e) {
-          console.error("Storage Load Fail", e);
-        }
+        } catch (e) {}
         return INITIAL_MEMBERS;
       });
 
+      // 모달 상태
       const [isManaging, setIsManaging] = useState(false);
       const [editNameInput, setEditNameInput] = useState("");
+      const [isAuthModal, setIsAuthModal] = useState(false);
+      const [newAdminId, setNewAdminId] = useState("");
+      const [newAdminPw, setNewAdminPw] = useState("");
 
       useEffect(() => {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
-        } catch (e) {
-          console.error("Storage Save Fail", e);
-        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
       }, [members]);
 
       // 월별 날짜 배열
@@ -159,7 +156,7 @@
         return days;
       }, [year, month]);
 
-      // 가변 인원수 맞춤형 당직 자동 편성 알고리즘
+      // 가변 인원 당직 자동 순환 편성
       const { schedule, summary } = useMemo(() => {
         const numMembers = members.length;
         const totalDays = daysInMonth.length;
@@ -213,15 +210,12 @@
         return { schedule: sched, summary: stats };
       }, [members, daysInMonth, month]);
 
-      // 오늘 투입 인원 식별
+      // 금일 당직자 추출
       const todayStatus = useMemo(() => {
         const todayDate = today.getDate();
         const dIdx = todayDate - 1;
-        
-        let dayWorker = "미지정";
-        let nightWorker = "미지정";
-        let restWorkers = [];
-        let workWorkers = [];
+        let dayWorker = "미지정", nightWorker = "미지정";
+        let restWorkers = [], workWorkers = [];
 
         if (schedule.length > 0 && dIdx >= 0 && dIdx < daysInMonth.length) {
           members.forEach((name, mIdx) => {
@@ -235,18 +229,27 @@
         return { dayWorker, nightWorker, restWorkers, workWorkers, todayDate };
       }, [schedule, members, daysInMonth]);
 
-      // 명단 수정 저장
+      // 계정 정보 저장
+      const handleSaveCreds = () => {
+        if (!newAdminId.trim() || !newAdminPw.trim()) {
+          alert("아이디와 비밀번호를 모두 입력해 주십시오.");
+          return;
+        }
+        localStorage.setItem(CRED_KEY, JSON.stringify({ id: newAdminId.trim(), pw: newAdminPw.trim() }));
+        alert("관리자 계정 정보가 안전하게 변경되었습니다.");
+        setIsAuthModal(false);
+      };
+
       const handleSaveMembers = () => {
         const parsed = editNameInput.split(",").map(s => s.trim()).filter(Boolean);
         if (parsed.length < 3) {
-          alert("주간/야간/비번 운영을 위해 최소 3명 이상의 인원이 필요합니다.");
+          alert("주간/야간/비번 운영을 위해 최소 3명 이상 필요합니다.");
           return;
         }
         setMembers(parsed);
         setIsManaging(false);
       };
 
-      // CSV 다운로드
       const downloadCSV = () => {
         let csv = "성명," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간(D),야간(N),주말당직합,상근(W),휴무/비번\n";
         members.forEach((name, idx) => {
@@ -260,231 +263,261 @@
         link.click();
       };
 
+      // 시인성 높은 뱃지 스타일
       const getDutyBadge = (duty) => {
         switch (duty) {
-          case 'D': return 'bg-amber-400 text-slate-950 font-black shadow-md ring-1 ring-amber-300';
-          case 'N': return 'bg-indigo-600 text-white font-black shadow-md ring-1 ring-indigo-400';
-          case 'B': return 'bg-emerald-950/70 text-emerald-400 font-bold border border-emerald-500/50';
-          case 'W': return 'bg-slate-800/80 text-slate-300 font-medium border border-slate-700/60';
-          case 'O': return 'bg-[#0b101c] text-slate-600 font-normal border border-slate-900';
+          case 'D': return 'bg-amber-400 text-slate-950 font-black shadow-sm';
+          case 'N': return 'bg-blue-600 text-white font-black shadow-sm';
+          case 'B': return 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
+          case 'W': return 'bg-slate-200 text-slate-700 font-medium';
+          case 'O': return 'bg-slate-50 text-slate-400 border border-slate-200';
           default: return '';
         }
       };
 
       return (
         <div className="max-w-[1700px] mx-auto px-4 py-6">
-          {/* 1. 최상단 네비게이션 헤더 */}
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          {/* 최상단 네비게이션 헤더 */}
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-emerald-400 animate-ping"></div>
-              <h1 className="text-2xl font-black text-white tracking-tight">DC운용3팀 통합 지휘 관제 센터</h1>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-mono font-bold">
-                LIVE OPS
+              <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight">DC운용3팀 통합 지휘 관제 포털</h1>
+              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold border border-blue-200">
+                14인 상시 가동
               </span>
             </div>
-            
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-slate-400 font-mono">
+
+            <div className="flex items-center gap-2.5">
+              <span className="text-xs font-semibold text-slate-500 mr-2">
                 {today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
               </span>
               <button
+                onClick={() => {
+                  const currentCred = JSON.parse(localStorage.getItem(CRED_KEY) || '{"id":"admin","pw":"1234"}');
+                  setNewAdminId(currentCred.id);
+                  setNewAdminPw(currentCred.pw);
+                  setIsAuthModal(true);
+                }}
+                className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg transition"
+              >
+                ⚙️ 계정/보안 관리
+              </button>
+              <button
                 onClick={onLogout}
-                className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-3 py-1.5 rounded-lg transition"
+                className="px-3 py-1.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg transition"
               >
                 로그아웃
               </button>
             </div>
           </div>
 
-          {/* 2. 상단 3개 센터 (일산, 식사, 양주) 날씨 및 외기 냉방 관제 카드 */}
+          {/* 1. 상단 3개 센터 날씨 및 외기 관제 (일산, 식사, 양주) */}
           <section className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-slate-300 flex items-center gap-2">
-                <span className="text-indigo-400">●</span> 3대 거점 센터 기상 및 인프라 외기 관제
+            <div className="flex items-center justify-between mb-2.5">
+              <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
+                <span className="text-blue-600">●</span> 3개 센터 거점 기상 & 외기 냉방(Free Cooling) 지수
               </h2>
-              <span className="text-[11px] text-slate-500">외기 냉방(Free Cooling) 연동 권장</span>
+              <span className="text-xs text-slate-500">기상 데이터: Open-Meteo 관측망 기준</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* 일산 센터 */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0c1427] to-[#0a0f1d] border border-slate-800/90 shadow-lg relative overflow-hidden">
+              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-indigo-400 bg-indigo-950/70 px-2 py-0.5 rounded border border-indigo-800">거점 1</span>
-                    <h3 className="text-lg font-black text-white mt-1">일산 센터</h3>
-                  </div>
-                  <div className="text-2xl">🌤️</div>
+                  <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">거점 1</span>
+                  <span className="text-xl">🌤️</span>
                 </div>
-                <div className="mt-3 flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-white font-mono">21.5°C</span>
-                  <span className="text-xs text-slate-400 font-mono">습도 52%</span>
+                <h3 className="text-lg font-black text-slate-900 mt-1">일산 센터</h3>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black text-slate-900 font-mono">21.5°C</span>
+                  <span className="text-xs font-bold text-slate-500">습도 52%</span>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">외기 상태:</span>
-                  <span className="text-emerald-400 font-bold">외기 도입 가동 적합</span>
+                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">외기 냉방 상태:</span>
+                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">가동 적합 구간</span>
                 </div>
               </div>
 
               {/* 식사 센터 */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0c1427] to-[#0a0f1d] border border-slate-800/90 shadow-lg relative overflow-hidden">
+              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-cyan-400 bg-cyan-950/70 px-2 py-0.5 rounded border border-cyan-800">거점 2</span>
-                    <h3 className="text-lg font-black text-white mt-1">식사 센터</h3>
-                  </div>
-                  <div className="text-2xl">☀️</div>
+                  <span className="text-xs font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">거점 2</span>
+                  <span className="text-xl">☀️</span>
                 </div>
-                <div className="mt-3 flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-white font-mono">22.1°C</span>
-                  <span className="text-xs text-slate-400 font-mono">습도 49%</span>
+                <h3 className="text-lg font-black text-slate-900 mt-1">식사 센터</h3>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black text-slate-900 font-mono">22.0°C</span>
+                  <span className="text-xs font-bold text-slate-500">습도 49%</span>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">외기 상태:</span>
-                  <span className="text-emerald-400 font-bold">외기 도입 가동 적합</span>
+                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">외기 냉방 상태:</span>
+                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">가동 적합 구간</span>
                 </div>
               </div>
 
               {/* 양주 센터 */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-[#0c1427] to-[#0a0f1d] border border-slate-800/90 shadow-lg relative overflow-hidden">
+              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800">거점 3</span>
-                    <h3 className="text-lg font-black text-white mt-1">양주 센터</h3>
-                  </div>
-                  <div className="text-2xl">⛅</div>
+                  <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">거점 3</span>
+                  <span className="text-xl">⛅</span>
                 </div>
-                <div className="mt-3 flex items-baseline gap-3">
-                  <span className="text-3xl font-black text-white font-mono">19.8°C</span>
-                  <span className="text-xs text-slate-400 font-mono">습도 56%</span>
+                <h3 className="text-lg font-black text-slate-900 mt-1">양주 센터</h3>
+                <div className="mt-2 flex items-baseline gap-2">
+                  <span className="text-3xl font-black text-slate-900 font-mono">19.8°C</span>
+                  <span className="text-xs font-bold text-slate-500">습도 55%</span>
                 </div>
-                <div className="mt-3 pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                  <span className="text-slate-400">외기 상태:</span>
-                  <span className="text-emerald-400 font-bold">최적 냉각 구간 (절감 우수)</span>
+                <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">외기 냉방 상태:</span>
+                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">최적 고효율 구간</span>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* 3. 데이터센터 전술 뉴스 브리핑 & 금일 작전 투입 대원 현황 (좌우 2분할) */}
+          {/* 2. 데이터센터 관련 뉴스 브리핑 & 금일 작전 대원 현황 */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-            {/* 데이터센터 관련 뉴스 */}
-            <section className="lg:col-span-6 p-5 rounded-2xl bg-[#0a0f1d] border border-slate-800 shadow-xl flex flex-col justify-between">
+            {/* 뉴스 브리핑 (클릭 시 새 창 이동) */}
+            <section className="lg:col-span-6 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800/80">
-                  <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                    <span className="text-amber-400">⚡</span> 금일 데이터센터 인프라 & 기술 브리핑
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
+                  <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                    <span className="text-blue-600">⚡</span> 데이터센터 인프라 & 실무 동향 브리핑
                   </h2>
-                  <span className="text-[11px] text-slate-500 font-mono">DAILY REPORT</span>
+                  <span className="text-[11px] text-slate-400 font-bold">클릭 시 기사로 이동</span>
                 </div>
-                <div className="space-y-3 text-xs">
-                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition cursor-pointer">
-                    <span className="text-indigo-400 font-bold text-[11px]">[전력/냉각]</span>
-                    <p className="font-semibold text-slate-200 mt-0.5">차세대 AI 데이터센터 액체 냉각(Direct-to-Chip) 도입 가속화 분석</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">고집적 랙 발열 관리를 위한 PUE 1.15 달성 인프라 최적화 지침 발표</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition cursor-pointer">
-                    <span className="text-amber-400 font-bold text-[11px]">[전력 계통]</span>
-                    <p className="font-semibold text-slate-200 mt-0.5">수도권 특고압 수전 용량 증설 및 비상 발전기 자동 절체(ATS) 무정전 점검</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">환절기 한전 선로 안정성 점검에 따른 UPS 배터리 모니터링 강화 권고</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 transition cursor-pointer">
-                    <span className="text-emerald-400 font-bold text-[11px]">[보안/방재]</span>
-                    <p className="font-semibold text-slate-200 mt-0.5">IDC 상주 인력 출입 통제 강화 및 소화 가스(IG-100) 방출 밸브 오작동 방지 훈련</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">서버룸 내 정전기 방지 및 분진 제어 규정 준수 여부 정기 감사 시행</p>
-                  </div>
+                <div className="space-y-2.5">
+                  <a
+                    href="https://search.naver.com/search.naver?where=news&query=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+%EC%95%A1%EC%B2%B4%EB%83%89%EA%B0%81"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-blue-600">[냉각 공조]</span>
+                      <span className="text-[11px] text-slate-400 group-hover:text-blue-600">자세히 보기 ➔</span>
+                    </div>
+                    <p className="font-bold text-slate-900 text-xs mt-1">차세대 AI 데이터센터 액체 냉각(Direct-to-Chip) 도입 가속화</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">초고밀도 랙 발열 관리를 위한 PUE 1.15 달성 전략 및 인프라 설계</p>
+                  </a>
+
+                  <a
+                    href="https://search.naver.com/search.naver?where=news&query=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+%EC%A0%84%EB%A0%A5+%EB%AA%A8%EB%8B%88%ED%84%B0%EB%A7%81"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-amber-600">[전력 설비]</span>
+                      <span className="text-[11px] text-slate-400 group-hover:text-blue-600">자세히 보기 ➔</span>
+                    </div>
+                    <p className="font-bold text-slate-900 text-xs mt-1">수도권 특고압 수전 용량 증설 및 UPS 배터리 무정전 안전 점검</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">정전 대비 ATS 자동 절체 시험 및 리튬인산철 배터리 화재 예방 수칙</p>
+                  </a>
+
+                  <a
+                    href="https://search.naver.com/search.naver?where=news&query=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+%EB%B3%B4%EC%95%88+%EC%B6%9C%EC%9E%85%ED%86%B5%EC%A0%9C"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-emerald-600">[보안 방재]</span>
+                      <span className="text-[11px] text-slate-400 group-hover:text-blue-600">자세히 보기 ➔</span>
+                    </div>
+                    <p className="font-bold text-slate-900 text-xs mt-1">IDC 서버룸 출입 통제 강화 및 가스계 소화설비 오작동 방지 가이드</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">서버실 내부 정전기 제어 및 온습도 이상 알람 임계치 설정 규정</p>
+                  </a>
                 </div>
               </div>
             </section>
 
-            {/* 금일(오늘) 주간/야간 투입 인원 현황 대시보드 */}
-            <section className="lg:col-span-6 p-5 rounded-2xl bg-[#0a0f1d] border border-slate-800 shadow-xl flex flex-col justify-between">
+            {/* 금일 작전 투입 대원 현황 */}
+            <section className="lg:col-span-6 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm flex flex-col justify-between">
               <div>
-                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800/80">
-                  <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-                    <span className="text-rose-400">🛡️</span> 오늘 작전 투입 대원 현황 (오늘 {todayStatus.todayDate}일 기준)
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
+                  <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                    <span className="text-amber-500">🛡️</span> 오늘 작전 투입 대원 현황 (오늘 {todayStatus.todayDate}일 기준)
                   </h2>
-                  <span className="text-[11px] text-indigo-400 font-mono font-bold">14인 체제 운용</span>
+                  <span className="text-xs font-bold text-blue-600">정원 {members.length}명</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  {/* 주간 당직자 */}
-                  <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                    <span className="text-xs font-black text-amber-400 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <div className="p-4 rounded-xl bg-amber-50 border border-amber-300">
+                    <span className="text-xs font-black text-amber-900 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
                       주간 당직 (08:00 ~ 19:00)
                     </span>
-                    <p className="text-2xl font-black text-white mt-1.5">{todayStatus.dayWorker}</p>
-                    <p className="text-[11px] text-amber-300/80 mt-1">주간 3대 센터 현장 점검 및 관제 총괄</p>
+                    <p className="text-2xl font-black text-slate-900 mt-1.5">{todayStatus.dayWorker}</p>
+                    <p className="text-[11px] text-slate-600 mt-1">3대 센터 현장 점검 및 주간 관제</p>
                   </div>
 
-                  {/* 야간 당직자 */}
-                  <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
-                    <span className="text-xs font-black text-indigo-400 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-indigo-400"></span>
+                  <div className="p-4 rounded-xl bg-blue-50 border border-blue-300">
+                    <span className="text-xs font-black text-blue-900 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-600"></span>
                       야간 당직 (19:00 ~ 익일 08:00)
                     </span>
-                    <p className="text-2xl font-black text-white mt-1.5">{todayStatus.nightWorker}</p>
-                    <p className="text-[11px] text-indigo-300/80 mt-1">심야 무중단 모니터링 및 비상 출동 대기</p>
+                    <p className="text-2xl font-black text-slate-900 mt-1.5">{todayStatus.nightWorker}</p>
+                    <p className="text-[11px] text-slate-600 mt-1">심야 무중단 모니터링 및 긴급 출동 대기</p>
                   </div>
                 </div>
 
                 <div className="space-y-2 text-xs">
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">야간 비번 대원 (퇴근 회복):</span>
-                    <span className="text-emerald-400 font-bold">{todayStatus.restWorkers.join(", ") || "해당 없음"}</span>
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
+                    <span className="text-slate-600 font-medium">야간 비번 대원 (퇴근 회복):</span>
+                    <span className="text-emerald-700 font-bold">{todayStatus.restWorkers.join(", ") || "해당 없음"}</span>
                   </div>
-                  <div className="p-2.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between">
-                    <span className="text-slate-400 font-medium">평일 상근 대원 (09:00 ~ 18:00):</span>
-                    <span className="text-slate-200 font-semibold">{todayStatus.workWorkers.length}명 가용 근무 중</span>
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between">
+                    <span className="text-slate-600 font-medium">평일 상근 대원 (09:00 ~ 18:00):</span>
+                    <span className="text-slate-800 font-bold">{todayStatus.workWorkers.length}명 가용 근무 중</span>
                   </div>
                 </div>
               </div>
             </section>
           </div>
 
-          {/* 4. 전체 DC운용3팀 근무표 섹션 */}
-          <section className="mb-6 p-6 rounded-3xl bg-[#090f1d] border border-slate-800 shadow-2xl">
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-800">
+          {/* 3. 전체 DC운용3팀 근무표 섹션 */}
+          <section className="p-6 rounded-3xl bg-white border border-slate-300 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200">
               <div>
-                <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2">
-                  <span className="text-indigo-500">📅</span> DC운용3팀 월간 전체 종합 근무표
+                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span className="text-blue-600">📅</span> DC운용3팀 월간 전체 종합 근무표
                 </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  14인 2교대 자동 최적화 · 브라우저 자동 영구 보존 · CSV 엑셀 연동
+                <p className="text-xs text-slate-500 mt-0.5">
+                  14인 가변 최적화 · 실시간 수정 영구 보존 · CSV 엑셀 연동
                 </p>
               </div>
 
-              <div className="flex items-center flex-wrap gap-3">
-                <div className="flex items-center bg-slate-950 border border-slate-700 rounded-xl px-2 py-1">
+              <div className="flex items-center flex-wrap gap-2.5">
+                <div className="flex items-center bg-slate-100 border border-slate-300 rounded-xl px-2 py-1">
                   <select 
                     value={year} 
                     onChange={(e) => setYear(Number(e.target.value))}
-                    className="bg-transparent text-slate-300 font-bold text-xs px-2 py-1.5 focus:outline-none cursor-pointer"
+                    className="bg-transparent text-slate-700 font-bold text-xs px-2 py-1.5 focus:outline-none cursor-pointer"
                   >
-                    <option value={2026} className="bg-slate-900">2026년</option>
-                    <option value={2027} className="bg-slate-900">2027년</option>
+                    <option value={2026}>2026년</option>
+                    <option value={2027}>2027년</option>
                   </select>
-                  <div className="w-[1px] h-3.5 bg-slate-700 mx-1"></div>
+                  <div className="w-[1px] h-3.5 bg-slate-300 mx-1"></div>
                   <select 
                     value={month} 
                     onChange={(e) => setMonth(Number(e.target.value))}
-                    className="bg-transparent text-indigo-400 font-extrabold text-xs px-2 py-1.5 focus:outline-none cursor-pointer"
+                    className="bg-transparent text-blue-600 font-black text-xs px-2 py-1.5 focus:outline-none cursor-pointer"
                   >
                     {[...Array(12)].map((_, i) => (
-                      <option key={i+1} value={i+1} className="bg-slate-900">{i+1}월</option>
+                      <option key={i+1} value={i+1}>{i+1}월</option>
                     ))}
                   </select>
                 </div>
 
                 <button 
                   onClick={() => { setEditNameInput(members.join(", ")); setIsManaging(!isManaging); }}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-semibold transition"
+                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition"
                 >
                   근무자 명단/정원 수정
                 </button>
 
                 <button 
                   onClick={downloadCSV}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition flex items-center gap-1.5"
                 >
                   엑셀(CSV) 다운로드
                 </button>
@@ -493,37 +526,37 @@
 
             {/* 인원 수정 패널 */}
             {isManaging && (
-              <div className="mb-6 p-5 rounded-2xl bg-[#0c1427] border-2 border-indigo-500/40 shadow-xl">
-                <h3 className="text-xs font-bold text-white mb-2">대원 명단 수정 (쉼표로 구분, 자유로운 증감 가능)</h3>
+              <div className="mb-5 p-5 rounded-2xl bg-slate-50 border border-blue-300 shadow-inner">
+                <h3 className="text-xs font-bold text-slate-800 mb-2">대원 명단 수정 (쉼표로 구분, 자유로운 증감 가능)</h3>
                 <textarea
                   rows="2"
                   value={editNameInput}
                   onChange={(e) => setEditNameInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                  className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                 />
                 <div className="flex justify-end gap-2 mt-3">
-                  <button onClick={() => setIsManaging(false)} className="px-3 py-1.5 bg-slate-800 text-xs rounded-lg text-slate-300">취소</button>
-                  <button onClick={handleSaveMembers} className="px-4 py-1.5 bg-indigo-600 text-xs font-bold rounded-lg text-white">저장 및 즉시 반영</button>
+                  <button onClick={() => setIsManaging(false)} className="px-3 py-1.5 bg-slate-200 text-xs font-bold rounded-lg text-slate-700">취소</button>
+                  <button onClick={handleSaveMembers} className="px-4 py-1.5 bg-blue-600 text-xs font-black rounded-lg text-white">저장 및 즉시 반영</button>
                 </div>
               </div>
             )}
 
             {/* 근무 뱃지 안내 */}
             <div className="mb-4 flex flex-wrap items-center gap-3 text-xs">
-              <span className="text-slate-400 font-bold">근무 코드:</span>
+              <span className="text-slate-500 font-bold">근무 구분:</span>
               <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-black">D : 주간 당직 (08~19) 1명</span>
-              <span className="px-2 py-0.5 rounded bg-indigo-600 text-white font-black">N : 야간 당직 (19~08) 1명</span>
-              <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold border border-emerald-500/50">B : 야간 비번</span>
-              <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">W : 평일 상근 (09~18)</span>
-              <span className="px-2 py-0.5 rounded bg-[#0b101c] text-slate-500 border border-slate-800">O : 주말 휴무</span>
+              <span className="px-2 py-0.5 rounded bg-blue-600 text-white font-black">N : 야간 당직 (19~08) 1명</span>
+              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-300">B : 야간 비번</span>
+              <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-medium">W : 평일 상근 (09~18)</span>
+              <span className="px-2 py-0.5 rounded bg-slate-50 text-slate-400 border border-slate-200">O : 주말 휴무</span>
             </div>
 
-            {/* 메인 테이블 */}
-            <div className="overflow-x-auto bg-[#070c18] border border-slate-800 rounded-2xl shadow-inner">
+            {/* 테이블 */}
+            <div className="overflow-x-auto border border-slate-200 rounded-2xl">
               <table className="w-full text-center border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-800 bg-[#060a14] text-slate-400 text-xs">
-                    <th className="py-3 px-3 sticky left-0 bg-[#060a14] z-30 font-black text-slate-200 min-w-[85px] border-r border-slate-800">
+                  <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 text-xs">
+                    <th className="py-3 px-3 sticky left-0 bg-slate-50 z-30 font-black text-slate-800 min-w-[85px] border-r border-slate-200">
                       성명
                     </th>
                     {daysInMonth.map((d, i) => {
@@ -533,44 +566,44 @@
                       return (
                         <th 
                           key={i} 
-                          className={`py-2 px-1 min-w-[32px] border-r border-slate-800/40 ${
-                            isToday ? 'bg-indigo-500/20 text-white ring-1 ring-indigo-500' :
-                            isSun ? 'bg-rose-500/10 text-rose-400' :
-                            isSat ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400'
+                          className={`py-2 px-1 min-w-[32px] border-r border-slate-200/80 ${
+                            isToday ? 'bg-blue-100 text-blue-900 font-extrabold ring-1 ring-blue-500' :
+                            isSun ? 'bg-rose-50 text-rose-600 font-bold' :
+                            isSat ? 'bg-blue-50 text-blue-600 font-bold' : 'text-slate-600'
                           }`}
                         >
-                          <div className="text-xs font-bold leading-none">{d.getDate()}</div>
+                          <div className="text-xs font-bold">{d.getDate()}</div>
                           <div className="text-[9px] mt-0.5 opacity-80">{['일','월','화','수','목','금','토'][d.getDay()]}</div>
                         </th>
                       );
                     })}
-                    <th className="py-2.5 px-2 text-amber-400 bg-amber-950/20 font-black min-w-[50px]">주간(D)</th>
-                    <th className="py-2.5 px-2 text-indigo-400 bg-indigo-950/20 font-black min-w-[50px]">야간(N)</th>
-                    <th className="py-2.5 px-2 text-rose-400 bg-rose-950/20 font-black min-w-[55px]">주말당직</th>
-                    <th className="py-2.5 px-2 text-slate-300 bg-slate-900/60 font-medium min-w-[50px]">상근(W)</th>
-                    <th className="py-2.5 px-2 text-emerald-400 bg-emerald-950/20 font-medium min-w-[55px]">휴무/비번</th>
+                    <th className="py-2.5 px-2 text-amber-700 bg-amber-50 font-black min-w-[50px]">주간(D)</th>
+                    <th className="py-2.5 px-2 text-blue-700 bg-blue-50 font-black min-w-[50px]">야간(N)</th>
+                    <th className="py-2.5 px-2 text-rose-700 bg-rose-50 font-black min-w-[55px]">주말당직</th>
+                    <th className="py-2.5 px-2 text-slate-700 bg-slate-100 font-bold min-w-[50px]">상근(W)</th>
+                    <th className="py-2.5 px-2 text-emerald-700 bg-emerald-50 font-bold min-w-[55px]">휴무/비번</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/60 text-xs font-mono">
+                <tbody className="divide-y divide-slate-200 text-xs font-mono">
                   {members.map((name, mIdx) => {
                     const s = summary[mIdx] || {};
                     return (
-                      <tr key={mIdx} className="hover:bg-slate-800/30 transition">
-                        <td className="py-2.5 px-3 font-bold text-slate-200 sticky left-0 bg-[#080e1b] z-20 whitespace-nowrap border-r border-slate-800 text-left pl-3.5">
+                      <tr key={mIdx} className="hover:bg-slate-50 transition">
+                        <td className="py-2.5 px-3 font-bold text-slate-900 sticky left-0 bg-white z-20 whitespace-nowrap border-r border-slate-200 text-left pl-3.5 shadow-sm">
                           {name}
                         </td>
                         {schedule[mIdx] && schedule[mIdx].map((duty, dIdx) => (
-                          <td key={dIdx} className="p-0.5 border-r border-slate-800/30">
+                          <td key={dIdx} className="p-0.5 border-r border-slate-200/60">
                             <div className={`h-7 w-7 mx-auto flex items-center justify-center rounded-lg transition-transform hover:scale-110 ${getDutyBadge(duty)}`}>
                               {duty}
                             </div>
                           </td>
                         ))}
-                        <td className="py-2 px-1 font-black text-amber-400 bg-amber-950/10">{s.dayCount}회</td>
-                        <td className="py-2 px-1 font-black text-indigo-400 bg-indigo-950/10">{s.nightCount}회</td>
-                        <td className="py-2 px-1 font-black text-rose-400 bg-rose-950/10">{s.weekendDuty}회</td>
-                        <td className="py-2 px-1 font-medium text-slate-300 bg-slate-900/30">{s.regularWork}일</td>
-                        <td className="py-2 px-1 font-semibold text-emerald-400 bg-emerald-950/10">{s.offCount}일</td>
+                        <td className="py-2 px-1 font-black text-amber-800 bg-amber-50/50">{s.dayCount}회</td>
+                        <td className="py-2 px-1 font-black text-blue-800 bg-blue-50/50">{s.nightCount}회</td>
+                        <td className="py-2 px-1 font-black text-rose-800 bg-rose-50/50">{s.weekendDuty}회</td>
+                        <td className="py-2 px-1 font-medium text-slate-700 bg-slate-50">{s.regularWork}일</td>
+                        <td className="py-2 px-1 font-semibold text-emerald-800 bg-emerald-50/50">{s.offCount}일</td>
                       </tr>
                     );
                   })}
@@ -578,19 +611,63 @@
               </table>
             </div>
           </section>
+
+          {/* 4. ID / PW 보안 관리 모달 */}
+          {isAuthModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-md border border-slate-300 shadow-2xl">
+                <h3 className="text-base font-extrabold text-slate-900 mb-1">⚙️ 관리자 로그인 계정 변경</h3>
+                <p className="text-xs text-slate-500 mb-4">로그인에 사용되는 ID와 비밀번호를 직접 설정합니다.</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">새로운 관리자 ID</label>
+                    <input
+                      type="text"
+                      value={newAdminId}
+                      onChange={(e) => setNewAdminId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">새로운 비밀번호 (PW)</label>
+                    <input
+                      type="password"
+                      value={newAdminPw}
+                      onChange={(e) => setNewAdminPw(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    onClick={() => setIsAuthModal(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSaveCreds}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md"
+                  >
+                    저장하기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       );
     }
 
-    // 최상위 엔트리 포인트 컴포넌트
+    // 엔트리 루트 컴포넌트
     function Root() {
       const [isAuthenticated, setIsAuthenticated] = useState(() => {
-        return localStorage.getItem(AUTH_KEY) === "authenticated";
+        return localStorage.getItem(AUTH_SESSION_KEY) === "authenticated";
       });
 
       const handleLogin = () => setIsAuthenticated(true);
       const handleLogout = () => {
-        localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem(AUTH_SESSION_KEY);
         setIsAuthenticated(false);
       };
 
