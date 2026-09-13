@@ -3,20 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DC운용3팀 통합 지휘 관제 시스템</title>
+  <title>DC운용3팀 통합 지휘 관제 포털</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            brand: { 500: '#3b82f6', 600: '#2563eb' }
-          }
-        }
-      }
-    }
-  </script>
   <!-- React & Babel CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -36,31 +25,44 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    const INITIAL_MEMBERS = [
-      "대원01", "대원02", "대원03", "대원04", "대원05", 
-      "대원06", "대원07", "대원08", "대원09", "대원10", 
-      "대원11", "대원12", "대원13", "대원14"
+    // 기본 계정 및 팀원 초기 세팅 (초기 PW는 모두 1234)
+    const DEFAULT_USERS = [
+      { id: "admin", pw: "1234", name: "사령관(관리자)", role: "admin" },
+      { id: "user01", pw: "1234", name: "대원01", role: "member" },
+      { id: "user02", pw: "1234", name: "대원02", role: "member" },
+      { id: "user03", pw: "1234", name: "대원03", role: "member" },
+      { id: "user04", pw: "1234", name: "대원04", role: "member" },
+      { id: "user05", pw: "1234", name: "대원05", role: "member" },
+      { id: "user06", pw: "1234", name: "대원06", role: "member" },
+      { id: "user07", pw: "1234", name: "대원07", role: "member" },
+      { id: "user08", pw: "1234", name: "대원08", role: "member" },
+      { id: "user09", pw: "1234", name: "대원09", role: "member" },
+      { id: "user10", pw: "1234", name: "대원10", role: "member" },
+      { id: "user11", pw: "1234", name: "대원11", role: "member" },
+      { id: "user12", pw: "1234", name: "대원12", role: "member" },
+      { id: "user13", pw: "1234", name: "대원13", role: "member" },
+      { id: "user14", pw: "1234", name: "대원14", role: "member" }
     ];
 
-    const STORAGE_KEY = "dc3_team_members_v4";
-    const AUTH_SESSION_KEY = "dc3_team_auth_session";
-    const CRED_KEY = "dc3_team_credentials";
+    const STORAGE_USERS_KEY = "dc3_team_users_vault_v5";
+    const AUTH_SESSION_KEY = "dc3_team_current_session_v5";
 
-    // 1. 로그인 인증 게이트
-    function LoginScreen({ onLogin }) {
+    // 1. 로그인 화면
+    function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
       const [error, setError] = useState("");
 
       const handleLogin = (e) => {
         e.preventDefault();
-        const savedCred = JSON.parse(localStorage.getItem(CRED_KEY) || '{"id":"admin","pw":"1234"}');
-        
-        if (id === savedCred.id && pw === savedCred.pw) {
-          localStorage.setItem(AUTH_SESSION_KEY, "authenticated");
-          onLogin();
+        const users = JSON.parse(localStorage.getItem(STORAGE_USERS_KEY) || JSON.stringify(DEFAULT_USERS));
+        const matched = users.find(u => u.id === id.trim() && u.pw === pw.trim());
+
+        if (matched) {
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(matched));
+          onLoginSuccess(matched);
         } else {
-          setError("아이디 또는 비밀번호가 일치하지 않습니다. (기본값: admin / 1234)");
+          setError("아이디 또는 비밀번호가 일치하지 않습니다. (관리자: admin / 대원: user01~user14 / 초기PW: 1234)");
         }
       };
 
@@ -71,79 +73,84 @@
               <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black tracking-widest bg-blue-50 text-blue-600 border border-blue-200 mb-3">
                 INTEGRATED OPS COMMAND
               </span>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
-              <p className="text-xs text-slate-500 mt-1">일산 · 식사 · 양주 센터 통합 운영 체계</p>
+              <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 통합 관제</h1>
+              <p className="text-xs text-slate-500 mt-1">일산 · 식사 · 양주 센터 14인 지휘 시스템</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">관제관 ID</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">아이디 (ID)</label>
                 <input
                   type="text"
                   value={id}
                   onChange={(e) => setId(e.target.value)}
-                  placeholder="아이디 입력 (기본: admin)"
+                  placeholder="admin 또는 user01 ~ user14"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">보안 암호 (PW)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">비밀번호 (PW)</label>
                 <input
                   type="password"
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
-                  placeholder="비밀번호 입력 (기본: 1234)"
+                  placeholder="초기 암호: 1234"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
 
-              {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
+              {error && <p className="text-xs text-rose-600 font-medium leading-relaxed">{error}</p>}
 
               <button
                 type="submit"
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2"
               >
-                관제 대시보드 입장
+                관제 대시보드 로그인
               </button>
             </form>
 
-            <div className="mt-6 text-center text-[11px] text-slate-400">
-              초기 관리자 계정: <strong>admin</strong> / 비밀번호: <strong>1234</strong>
+            <div className="mt-6 p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
+              <p>👑 <strong>관리자:</strong> ID <code className="text-blue-600 font-bold">admin</code> / PW <code>1234</code></p>
+              <p>👤 <strong>팀원들:</strong> ID <code className="text-indigo-600 font-bold">user01</code> ~ <code className="text-indigo-600 font-bold">user14</code> / PW <code>1234</code></p>
             </div>
           </div>
         </div>
       );
     }
 
-    // 2. 통합 관제 대시보드
-    function MainDashboard({ onLogout }) {
+    // 2. 통합 대시보드
+    function MainDashboard({ currentUser, onLogout }) {
       const today = new Date();
       const [year, setYear] = useState(today.getFullYear());
       const [month, setMonth] = useState(today.getMonth() + 1);
 
-      // 근무자 명단 영구 보존
-      const [members, setMembers] = useState(() => {
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-          }
-        } catch (e) {}
-        return INITIAL_MEMBERS;
+      // 전체 유저 및 팀원 명단 상태
+      const [users, setUsers] = useState(() => {
+        const saved = localStorage.getItem(STORAGE_USERS_KEY);
+        return saved ? JSON.parse(saved) : DEFAULT_USERS;
       });
 
-      // 모달 상태
-      const [isManaging, setIsManaging] = useState(false);
-      const [editNameInput, setEditNameInput] = useState("");
-      const [isAuthModal, setIsAuthModal] = useState(false);
-      const [newAdminId, setNewAdminId] = useState("");
-      const [newAdminPw, setNewAdminPw] = useState("");
+      // 모달 상태들
+      const [isMemberManageModal, setIsMemberManageModal] = useState(false);
+      const [isMyPwModal, setIsMyPwModal] = useState(false);
+      const [isSyncModal, setIsSyncModal] = useState(false);
+      const [syncCodeInput, setSyncCodeInput] = useState("");
+      
+      // 내 비번 변경용
+      const [myNewPw, setMyNewPw] = useState("");
+
+      // 관리자용 팀원 수정 데이터
+      const [editUsersText, setEditUsersText] = useState("");
 
       useEffect(() => {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(members));
-      }, [members]);
+        localStorage.setItem(STORAGE_USERS_KEY, JSON.stringify(users));
+      }, [users]);
+
+      // 팀원 목록 (관리자 제외 대원 14인)
+      const memberList = useMemo(() => {
+        return users.filter(u => u.role === "member");
+      }, [users]);
 
       // 월별 날짜 배열
       const daysInMonth = useMemo(() => {
@@ -156,9 +163,9 @@
         return days;
       }, [year, month]);
 
-      // 가변 인원 당직 자동 순환 편성
+      // 가변 인원 당직 자동 순환 편성 알고리즘
       const { schedule, summary } = useMemo(() => {
-        const numMembers = members.length;
+        const numMembers = memberList.length;
         const totalDays = daysInMonth.length;
         if (numMembers === 0) return { schedule: [], summary: [] };
 
@@ -195,7 +202,7 @@
           }
         }
 
-        const stats = members.map((name, idx) => {
+        const stats = memberList.map((m, idx) => {
           let dayCount = 0, nightCount = 0, weekendDuty = 0, regularWork = 0, offCount = 0;
           sched[idx].forEach((duty, dIdx) => {
             const isWeekend = (daysInMonth[dIdx].getDay() === 0 || daysInMonth[dIdx].getDay() === 6);
@@ -204,13 +211,13 @@
             else if (duty === 'W') { regularWork++; }
             else if (duty === 'O' || duty === 'B') { offCount++; }
           });
-          return { name, dayCount, nightCount, weekendDuty, regularWork, offCount };
+          return { name: m.name, id: m.id, dayCount, nightCount, weekendDuty, regularWork, offCount };
         });
 
         return { schedule: sched, summary: stats };
-      }, [members, daysInMonth, month]);
+      }, [memberList, daysInMonth, month]);
 
-      // 금일 당직자 추출
+      // 오늘 투입 인원 현황
       const todayStatus = useMemo(() => {
         const todayDate = today.getDate();
         const dIdx = todayDate - 1;
@@ -218,43 +225,95 @@
         let restWorkers = [], workWorkers = [];
 
         if (schedule.length > 0 && dIdx >= 0 && dIdx < daysInMonth.length) {
-          members.forEach((name, mIdx) => {
+          memberList.forEach((m, mIdx) => {
             const duty = schedule[mIdx]?.[dIdx];
-            if (duty === 'D') dayWorker = name;
-            else if (duty === 'N') nightWorker = name;
-            else if (duty === 'B') restWorkers.push(name);
-            else if (duty === 'W') workWorkers.push(name);
+            if (duty === 'D') dayWorker = m.name;
+            else if (duty === 'N') nightWorker = m.name;
+            else if (duty === 'B') restWorkers.push(m.name);
+            else if (duty === 'W') workWorkers.push(m.name);
           });
         }
         return { dayWorker, nightWorker, restWorkers, workWorkers, todayDate };
-      }, [schedule, members, daysInMonth]);
+      }, [schedule, memberList, daysInMonth]);
 
-      // 계정 정보 저장
-      const handleSaveCreds = () => {
-        if (!newAdminId.trim() || !newAdminPw.trim()) {
-          alert("아이디와 비밀번호를 모두 입력해 주십시오.");
+      // 로그인한 본인의 근무 통계 추출
+      const myStat = useMemo(() => {
+        if (currentUser.role === 'admin') return null;
+        return summary.find(s => s.id === currentUser.id);
+      }, [summary, currentUser]);
+
+      // 내 비밀번호 자체 변경
+      const handleChangeMyPw = () => {
+        if (!myNewPw.trim()) {
+          alert("새 비밀번호를 입력해 주십시오.");
           return;
         }
-        localStorage.setItem(CRED_KEY, JSON.stringify({ id: newAdminId.trim(), pw: newAdminPw.trim() }));
-        alert("관리자 계정 정보가 안전하게 변경되었습니다.");
-        setIsAuthModal(false);
+        const updated = users.map(u => u.id === currentUser.id ? { ...u, pw: myNewPw.trim() } : u);
+        setUsers(updated);
+        alert("비밀번호가 안전하게 변경되었습니다. 다음 로그인 시 새 비밀번호가 적용됩니다.");
+        setIsMyPwModal(false);
+        setMyNewPw("");
       };
 
-      const handleSaveMembers = () => {
-        const parsed = editNameInput.split(",").map(s => s.trim()).filter(Boolean);
-        if (parsed.length < 3) {
-          alert("주간/야간/비번 운영을 위해 최소 3명 이상 필요합니다.");
+      // 타 브라우저 간 완벽 동기화를 위한 설정 코드 내보내기/불러오기
+      const exportSyncData = () => {
+        const payload = btoa(encodeURIComponent(JSON.stringify(users)));
+        navigator.clipboard.writeText(payload);
+        alert("중앙 동기화 코드가 클립보드에 복사되었습니다!\n다른 브라우저나 스마트폰에서 [동기화 코드 적용]에 붙여넣으시면 100% 동일하게 복제됩니다.");
+      };
+
+      const importSyncData = () => {
+        try {
+          const decoded = decodeURIComponent(atob(syncCodeInput.trim()));
+          const parsed = JSON.parse(decoded);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setUsers(parsed);
+            alert("원격 기기의 팀원 명단 및 계정 데이터가 완벽히 동기화되었습니다!");
+            setIsSyncModal(false);
+          } else {
+            alert("올바른 동기화 코드가 아닙니다.");
+          }
+        } catch (e) {
+          alert("코드 해석 실패: 유효한 코드를 입력해 주십시오.");
+        }
+      };
+
+      // 관리자: 팀원 명단 일괄 수정 (이름, ID, PW)
+      const handleOpenAdminManage = () => {
+        // 형식: ID,이름,PW
+        const text = memberList.map(m => `${m.id},${m.name},${m.pw}`).join("\n");
+        setEditUsersText(text);
+        setIsMemberManageModal(true);
+      };
+
+      const handleSaveAdminManage = () => {
+        const lines = editUsersText.split("\n").map(l => l.trim()).filter(Boolean);
+        const adminUser = users.find(u => u.role === "admin") || DEFAULT_USERS[0];
+        
+        const newMembers = lines.map((line, idx) => {
+          const parts = line.split(",").map(p => p.trim());
+          const id = parts[0] || `user${String(idx+1).padStart(2,'0')}`;
+          const name = parts[1] || `대원${idx+1}`;
+          const pw = parts[2] || "1234";
+          return { id, name, pw, role: "member" };
+        });
+
+        if (newMembers.length < 3) {
+          alert("원활한 교대근무 편성을 위해 최소 3명 이상의 팀원이 필요합니다.");
           return;
         }
-        setMembers(parsed);
-        setIsManaging(false);
+
+        setUsers([adminUser, ...newMembers]);
+        alert("대원 명단 및 계정 정보가 성공적으로 갱신되었습니다.");
+        setIsMemberManageModal(false);
       };
 
+      // CSV 다운로드
       const downloadCSV = () => {
-        let csv = "성명," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간(D),야간(N),주말당직합,상근(W),휴무/비번\n";
-        members.forEach((name, idx) => {
+        let csv = "성명,아이디," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간(D),야간(N),주말당직합,상근(W),휴무/비번\n";
+        memberList.forEach((m, idx) => {
           const s = summary[idx];
-          csv += `${name},` + schedule[idx].join(",") + `,${s.dayCount},${s.nightCount},${s.weekendDuty},${s.regularWork},${s.offCount}\n`;
+          csv += `${m.name},${m.id},` + schedule[idx].join(",") + `,${s.dayCount},${s.nightCount},${s.weekendDuty},${s.regularWork},${s.offCount}\n`;
         });
         const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
@@ -263,7 +322,6 @@
         link.click();
       };
 
-      // 시인성 높은 뱃지 스타일
       const getDutyBadge = (duty) => {
         switch (duty) {
           case 'D': return 'bg-amber-400 text-slate-950 font-black shadow-sm';
@@ -277,31 +335,46 @@
 
       return (
         <div className="max-w-[1700px] mx-auto px-4 py-6">
-          {/* 최상단 네비게이션 헤더 */}
+          {/* 상단 네비게이션 */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
             <div className="flex items-center gap-3">
               <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">DC운용3팀 통합 지휘 관제 포털</h1>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-bold border border-blue-200">
-                14인 상시 가동
-              </span>
+              <div>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  DC운용3팀 통합 지휘 관제 포털
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong> 
+                  {currentUser.role === 'admin' ? " [통합 총괄 사령관]" : " [현장 운용 대원]"}
+                </p>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
-              <span className="text-xs font-semibold text-slate-500 mr-2">
-                {today.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
-              </span>
+            <div className="flex items-center flex-wrap gap-2">
+              {currentUser.role === 'admin' && (
+                <>
+                  <button
+                    onClick={handleOpenAdminManage}
+                    className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg transition"
+                  >
+                    👥 대원 14인 ID/PW 관리
+                  </button>
+                  <button
+                    onClick={() => setIsSyncModal(true)}
+                    className="px-3 py-1.5 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg transition"
+                  >
+                    ☁️ 다른 브라우저 동기화
+                  </button>
+                </>
+              )}
+
               <button
-                onClick={() => {
-                  const currentCred = JSON.parse(localStorage.getItem(CRED_KEY) || '{"id":"admin","pw":"1234"}');
-                  setNewAdminId(currentCred.id);
-                  setNewAdminPw(currentCred.pw);
-                  setIsAuthModal(true);
-                }}
+                onClick={() => setIsMyPwModal(true)}
                 className="px-3 py-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-lg transition"
               >
-                ⚙️ 계정/보안 관리
+                🔑 내 비밀번호 변경
               </button>
+
               <button
                 onClick={onLogout}
                 className="px-3 py-1.5 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg transition"
@@ -311,16 +384,46 @@
             </div>
           </div>
 
-          {/* 1. 상단 3개 센터 날씨 및 외기 관제 (일산, 식사, 양주) */}
+          {/* 대원 본인 로그인 시 맞춤형 개인 브리핑 카드 */}
+          {myStat && (
+            <div className="mb-6 p-5 rounded-2xl bg-blue-50 border border-blue-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-black text-blue-700 uppercase tracking-wider">대원 개인 맞춤 알림</span>
+                <h3 className="text-lg font-black text-slate-900 mt-0.5">
+                  {currentUser.name} 대원님의 {month}월 당직 임무 요약
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5">본인의 주간/야간 배정 내역을 확인하고 임무를 완수하십시오.</p>
+              </div>
+              <div className="flex items-center gap-3 text-center">
+                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-500">주간(D)</span>
+                  <p className="text-xl font-black text-amber-600 font-mono">{myStat.dayCount}회</p>
+                </div>
+                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-500">야간(N)</span>
+                  <p className="text-xl font-black text-blue-600 font-mono">{myStat.nightCount}회</p>
+                </div>
+                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-500">주말당직</span>
+                  <p className="text-xl font-black text-rose-600 font-mono">{myStat.weekendDuty}회</p>
+                </div>
+                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-500">평일상근</span>
+                  <p className="text-xl font-black text-slate-800 font-mono">{myStat.regularWork}일</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 1. 상단 3개 센터 기상 정보 (Open-Meteo 기반) */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
-                <span className="text-blue-600">●</span> 3개 센터 거점 기상 & 외기 냉방(Free Cooling) 지수
+                <span className="text-blue-600">●</span> 3개 거점 센터 기상 & 외기 냉방(Free Cooling) 지수
               </h2>
-              <span className="text-xs text-slate-500">기상 데이터: Open-Meteo 관측망 기준</span>
+              <span className="text-xs text-slate-500">Open-Meteo 글로벌 기상 연동</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 일산 센터 */}
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">거점 1</span>
@@ -332,12 +435,11 @@
                   <span className="text-xs font-bold text-slate-500">습도 52%</span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">외기 냉방 상태:</span>
+                  <span className="text-slate-500">외기 냉방:</span>
                   <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">가동 적합 구간</span>
                 </div>
               </div>
 
-              {/* 식사 센터 */}
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">거점 2</span>
@@ -349,12 +451,11 @@
                   <span className="text-xs font-bold text-slate-500">습도 49%</span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">외기 냉방 상태:</span>
+                  <span className="text-slate-500">외기 냉방:</span>
                   <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">가동 적합 구간</span>
                 </div>
               </div>
 
-              {/* 양주 센터 */}
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">거점 3</span>
@@ -366,21 +467,20 @@
                   <span className="text-xs font-bold text-slate-500">습도 55%</span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                  <span className="text-slate-500">외기 냉방 상태:</span>
+                  <span className="text-slate-500">외기 냉방:</span>
                   <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">최적 고효율 구간</span>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* 2. 데이터센터 관련 뉴스 브리핑 & 금일 작전 대원 현황 */}
+          {/* 2. 뉴스 & 오늘 당직 현황 */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-            {/* 뉴스 브리핑 (클릭 시 새 창 이동) */}
             <section className="lg:col-span-6 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
                   <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
-                    <span className="text-blue-600">⚡</span> 데이터센터 인프라 & 실무 동향 브리핑
+                    <span className="text-blue-600">⚡</span> 데이터센터 인프라 실무 동향 브리핑
                   </h2>
                   <span className="text-[11px] text-slate-400 font-bold">클릭 시 기사로 이동</span>
                 </div>
@@ -430,14 +530,13 @@
               </div>
             </section>
 
-            {/* 금일 작전 투입 대원 현황 */}
             <section className="lg:col-span-6 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
                   <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
                     <span className="text-amber-500">🛡️</span> 오늘 작전 투입 대원 현황 (오늘 {todayStatus.todayDate}일 기준)
                   </h2>
-                  <span className="text-xs font-bold text-blue-600">정원 {members.length}명</span>
+                  <span className="text-xs font-bold text-blue-600">총원 {memberList.length}명</span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -456,7 +555,7 @@
                       야간 당직 (19:00 ~ 익일 08:00)
                     </span>
                     <p className="text-2xl font-black text-slate-900 mt-1.5">{todayStatus.nightWorker}</p>
-                    <p className="text-[11px] text-slate-600 mt-1">심야 무중단 모니터링 및 긴급 출동 대기</p>
+                    <p className="text-[11px] text-slate-600 mt-1">심야 무중단 모니터링 및 비상 대기</p>
                   </div>
                 </div>
 
@@ -474,7 +573,7 @@
             </section>
           </div>
 
-          {/* 3. 전체 DC운용3팀 근무표 섹션 */}
+          {/* 3. 전체 DC운용3팀 근무표 */}
           <section className="p-6 rounded-3xl bg-white border border-slate-300 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200">
               <div>
@@ -482,7 +581,7 @@
                   <span className="text-blue-600">📅</span> DC운용3팀 월간 전체 종합 근무표
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  14인 가변 최적화 · 실시간 수정 영구 보존 · CSV 엑셀 연동
+                  14인 가변 자동 분배 · 전 대원 개별 계정 보안 연동 · CSV 엑셀 출력
                 </p>
               </div>
 
@@ -509,13 +608,6 @@
                 </div>
 
                 <button 
-                  onClick={() => { setEditNameInput(members.join(", ")); setIsManaging(!isManaging); }}
-                  className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition"
-                >
-                  근무자 명단/정원 수정
-                </button>
-
-                <button 
                   onClick={downloadCSV}
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-md shadow-blue-500/20 transition flex items-center gap-1.5"
                 >
@@ -523,23 +615,6 @@
                 </button>
               </div>
             </div>
-
-            {/* 인원 수정 패널 */}
-            {isManaging && (
-              <div className="mb-5 p-5 rounded-2xl bg-slate-50 border border-blue-300 shadow-inner">
-                <h3 className="text-xs font-bold text-slate-800 mb-2">대원 명단 수정 (쉼표로 구분, 자유로운 증감 가능)</h3>
-                <textarea
-                  rows="2"
-                  value={editNameInput}
-                  onChange={(e) => setEditNameInput(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
-                />
-                <div className="flex justify-end gap-2 mt-3">
-                  <button onClick={() => setIsManaging(false)} className="px-3 py-1.5 bg-slate-200 text-xs font-bold rounded-lg text-slate-700">취소</button>
-                  <button onClick={handleSaveMembers} className="px-4 py-1.5 bg-blue-600 text-xs font-black rounded-lg text-white">저장 및 즉시 반영</button>
-                </div>
-              </div>
-            )}
 
             {/* 근무 뱃지 안내 */}
             <div className="mb-4 flex flex-wrap items-center gap-3 text-xs">
@@ -556,8 +631,8 @@
               <table className="w-full text-center border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-slate-600 text-xs">
-                    <th className="py-3 px-3 sticky left-0 bg-slate-50 z-30 font-black text-slate-800 min-w-[85px] border-r border-slate-200">
-                      성명
+                    <th className="py-3 px-3 sticky left-0 bg-slate-50 z-30 font-black text-slate-800 min-w-[90px] border-r border-slate-200">
+                      대원명 (ID)
                     </th>
                     {daysInMonth.map((d, i) => {
                       const isSun = d.getDay() === 0;
@@ -585,12 +660,13 @@
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 text-xs font-mono">
-                  {members.map((name, mIdx) => {
+                  {memberList.map((m, mIdx) => {
                     const s = summary[mIdx] || {};
+                    const isMe = m.id === currentUser.id;
                     return (
-                      <tr key={mIdx} className="hover:bg-slate-50 transition">
-                        <td className="py-2.5 px-3 font-bold text-slate-900 sticky left-0 bg-white z-20 whitespace-nowrap border-r border-slate-200 text-left pl-3.5 shadow-sm">
-                          {name}
+                      <tr key={mIdx} className={`${isMe ? 'bg-blue-50/60 font-black' : 'hover:bg-slate-50'} transition`}>
+                        <td className={`py-2.5 px-3 sticky left-0 z-20 whitespace-nowrap border-r border-slate-200 text-left pl-3 shadow-sm ${isMe ? 'bg-blue-100 text-blue-900' : 'bg-white text-slate-900'}`}>
+                          {m.name} <span className="text-[10px] text-slate-400 font-normal">({m.id})</span>
                         </td>
                         {schedule[mIdx] && schedule[mIdx].map((duty, dIdx) => (
                           <td key={dIdx} className="p-0.5 border-r border-slate-200/60">
@@ -612,45 +688,96 @@
             </div>
           </section>
 
-          {/* 4. ID / PW 보안 관리 모달 */}
-          {isAuthModal && (
+          {/* 모달 1: 내 비밀번호 변경 모달 */}
+          {isMyPwModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-3xl p-6 w-full max-w-md border border-slate-300 shadow-2xl">
-                <h3 className="text-base font-extrabold text-slate-900 mb-1">⚙️ 관리자 로그인 계정 변경</h3>
-                <p className="text-xs text-slate-500 mb-4">로그인에 사용되는 ID와 비밀번호를 직접 설정합니다.</p>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">새로운 관리자 ID</label>
-                    <input
-                      type="text"
-                      value={newAdminId}
-                      onChange={(e) => setNewAdminId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">새로운 비밀번호 (PW)</label>
-                    <input
-                      type="password"
-                      value={newAdminPw}
-                      onChange={(e) => setNewAdminPw(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
+              <div className="bg-white rounded-3xl p-6 w-full max-w-sm border border-slate-300 shadow-2xl">
+                <h3 className="text-base font-extrabold text-slate-900 mb-1">🔑 내 비밀번호 변경</h3>
+                <p className="text-xs text-slate-500 mb-4">{currentUser.name}({currentUser.id})님의 비밀번호를 변경합니다.</p>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">새로운 비밀번호</label>
+                  <input
+                    type="password"
+                    value={myNewPw}
+                    onChange={(e) => setMyNewPw(e.target.value)}
+                    placeholder="새 암호 입력"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-sm text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
                 </div>
-                <div className="flex justify-end gap-2 mt-6">
+                <div className="flex justify-end gap-2 mt-5">
+                  <button onClick={() => setIsMyPwModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">취소</button>
+                  <button onClick={handleChangeMyPw} className="px-4 py-2 bg-blue-600 text-white text-xs font-black rounded-xl">변경 저장</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 모달 2: 관리자 전용 대원 14인 ID/이름/PW 일괄 관리 */}
+          {isMemberManageModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-xl border border-slate-300 shadow-2xl">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-base font-extrabold text-slate-900">👥 팀원 14인 계정 및 명단 관리 (관리자 전용)</h3>
+                  <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded font-bold">1줄당: ID,이름,비밀번호</span>
+                </div>
+                <p className="text-xs text-slate-500 mb-3 leading-relaxed">
+                  쉼표(,)로 구분하여 한 줄에 한 명씩 입력합니다. 이름을 바꾸거나 비밀번호를 초기화할 때 유용합니다.
+                </p>
+                <textarea
+                  rows="10"
+                  value={editUsersText}
+                  onChange={(e) => setEditUsersText(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 font-mono focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
+                  placeholder="user01,홍길동,1234&#10;user02,김철수,1234..."
+                />
+                <div className="flex justify-end gap-2 mt-4">
+                  <button onClick={() => setIsMemberManageModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">닫기</button>
+                  <button onClick={handleSaveAdminManage} className="px-4 py-2 bg-blue-600 text-white text-xs font-black rounded-xl">전체 갱신 저장</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 모달 3: 다른 브라우저/스마트폰 동기화 센터 */}
+          {isSyncModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-lg border border-slate-300 shadow-2xl">
+                <h3 className="text-base font-extrabold text-slate-900 mb-1">☁️ 기기간 완벽 동기화 허브</h3>
+                <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                  다른 브라우저(크롬/엣지/사파리)나 스마트폰에서 팀원 명단과 비밀번호가 그대로 유지되도록 원터치로 연동합니다.
+                </p>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 mb-4">
+                  <span className="text-xs font-bold text-slate-700 block mb-1">방법 1: 현재 데이터 복사하기</span>
+                  <p className="text-[11px] text-slate-500 mb-3">지금 브라우저의 전체 명단 및 암호 데이터를 텍스트 코드로 추출합니다.</p>
                   <button
-                    onClick={() => setIsAuthModal(false)}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl"
+                    onClick={exportSyncData}
+                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-xl shadow-sm transition"
                   >
-                    취소
+                    📋 동기화 코드 클립보드 복사
                   </button>
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                  <span className="text-xs font-bold text-slate-700 block mb-1">방법 2: 복사해 온 코드 주입하기</span>
+                  <p className="text-[11px] text-slate-500 mb-2">다른 기기에서 복사한 코드를 아래에 붙여넣고 적용합니다.</p>
+                  <input
+                    type="text"
+                    value={syncCodeInput}
+                    onChange={(e) => setSyncCodeInput(e.target.value)}
+                    placeholder="여기에 동기화 코드를 붙여넣으십시오"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-mono mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                   <button
-                    onClick={handleSaveCreds}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md"
+                    onClick={importSyncData}
+                    className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-sm transition"
                   >
-                    저장하기
+                    ⚡ 원격 기기 데이터 즉시 주입 및 덮어쓰기
                   </button>
+                </div>
+
+                <div className="flex justify-end mt-4">
+                  <button onClick={() => setIsSyncModal(false)} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">닫기</button>
                 </div>
               </div>
             </div>
@@ -659,22 +786,23 @@
       );
     }
 
-    // 엔트리 루트 컴포넌트
+    // 최상위 루트
     function Root() {
-      const [isAuthenticated, setIsAuthenticated] = useState(() => {
-        return localStorage.getItem(AUTH_SESSION_KEY) === "authenticated";
+      const [currentUser, setCurrentUser] = useState(() => {
+        const saved = localStorage.getItem(AUTH_SESSION_KEY);
+        return saved ? JSON.parse(saved) : null;
       });
 
-      const handleLogin = () => setIsAuthenticated(true);
+      const handleLoginSuccess = (user) => setCurrentUser(user);
       const handleLogout = () => {
         localStorage.removeItem(AUTH_SESSION_KEY);
-        setIsAuthenticated(false);
+        setCurrentUser(null);
       };
 
-      if (!isAuthenticated) {
-        return <LoginScreen onLogin={handleLogin} />;
+      if (!currentUser) {
+        return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
       }
-      return <MainDashboard onLogout={handleLogout} />;
+      return <MainDashboard currentUser={currentUser} onLogout={handleLogout} />;
     }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
