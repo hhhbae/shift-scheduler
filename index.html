@@ -27,12 +27,13 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useEffect, useMemo, useRef } = React;
 
     // 사령관님의 Firebase Realtime Database
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v11";
-    const NOTICE_POPUP_DISMISS_KEY = "dc3_notice_dismiss_date";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v12";
+    const ANCHOR_POPUP_DISMISS_KEY = "dc3_anchor_dismiss_date";
+    const PERMANENT_DISMISSED_NOTICES_KEY = "dc3_notices_permanently_dismissed";
 
     const DEFAULT_MEMBERS = [
       { id: "user01", name: "대원01", pw: "1234" },
@@ -51,7 +52,24 @@
       { id: "user14", name: "대원14", pw: "1234" }
     ];
 
-    // 1. 프리미엄 사이버 관제 스타일 로그인 게이트웨이
+    // 한국어 여성 음성 합성 브리핑 함수
+    const speakAnchorMessage = (text) => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'ko-KR';
+        utterance.rate = 0.95;
+        utterance.pitch = 1.15; // 여성 아나운서 톤
+        
+        const voices = window.speechSynthesis.getVoices();
+        const koFemaleVoice = voices.find(v => v.lang.includes('ko') && (v.name.includes('Female') || v.name.includes('Yuna') || v.name.includes('Google 한국어') || v.name.includes('Heami') || v.name.includes('SunHi')));
+        if (koFemaleVoice) utterance.voice = koFemaleVoice;
+
+        window.speechSynthesis.speak(utterance);
+      }
+    };
+
+    // 1. 프리미엄 사이버 관제 스타일 로그인 화면
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -72,11 +90,10 @@
         setError("");
 
         try {
-          // 총괄 관리자 계정 (admin / 1234)
           if (trimmedId === "admin" && (trimmedPw === "1234" || trimmedPw === "")) {
             const adminUser = { id: "admin", name: "총괄 관리자", role: "admin" };
             localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(adminUser));
-            onLoginSuccess(adminUser);
+            onLoginSuccess(adminUser, true);
             return;
           }
 
@@ -96,14 +113,14 @@
           const matched = currentMembers.find(m => m.id === trimmedId);
 
           if (!matched) {
-            setError(`시스템에 등록되지 않은 호출 ID입니다: [${trimmedId}]`);
+            setError(`등록되지 않은 아이디입니다: [${trimmedId}]`);
             setIsVerifying(false);
             return;
           }
 
           const validPw = matched.pw || "1234";
           if (trimmedPw !== validPw && trimmedPw !== "") {
-            setError("인가 비밀번호가 일치하지 않습니다.");
+            setError("비밀번호가 일치하지 않습니다.");
             setIsVerifying(false);
             return;
           }
@@ -115,7 +132,7 @@
           };
 
           localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(memberUser));
-          onLoginSuccess(memberUser);
+          onLoginSuccess(memberUser, true);
         } catch (err) {
           setError("인증 통신 오류: " + err.message);
         } finally {
@@ -125,13 +142,11 @@
 
       return (
         <div className="min-h-screen flex items-center justify-center px-4 bg-slate-950 relative overflow-hidden">
-          {/* 하이테크 배경 장식 효과 */}
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl animate-glow pointer-events-none"></div>
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl animate-glow pointer-events-none"></div>
           <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none"></div>
 
           <div className="w-full max-w-md p-8 sm:p-10 rounded-3xl bg-slate-900/80 backdrop-blur-2xl border border-slate-700/60 shadow-2xl shadow-blue-950/50 relative z-10">
-            {/* 상단 엠블럼 및 헤더 */}
             <div className="text-center mb-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-black tracking-widest bg-blue-500/10 text-blue-400 border border-blue-500/30 mb-3 shadow-inner">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -159,7 +174,7 @@
                   value={id}
                   onChange={(e) => setId(e.target.value)}
                   placeholder="admin 또는 본인 ID"
-                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium transition"
                 />
               </div>
 
@@ -175,7 +190,7 @@
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
                   placeholder="초기 암호: 1234"
-                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium transition"
                 />
               </div>
 
@@ -222,7 +237,7 @@
     }
 
     // 2. 통합 관제 대시보드
-    function MainDashboard({ currentUser, onLogout, onUpdateCurrentUserName }) {
+    function MainDashboard({ currentUser, onLogout, onUpdateCurrentUserName, justLoggedIn }) {
       const today = new Date();
       const [year, setYear] = useState(today.getFullYear());
       const [month, setMonth] = useState(today.getMonth() + 1);
@@ -231,6 +246,9 @@
       const [notices, setNotices] = useState([]);
       const [cloudStatus, setCloudStatus] = useState("DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
+
+      // ★★★ [신규 1: 여성 아나운서 동영상 응원 팝업 제어] ★★★
+      const [showAnchorGreeting, setShowAnchorGreeting] = useState(false);
 
       // 실시간 기상 상태
       const [weatherData, setWeatherData] = useState({
@@ -358,10 +376,19 @@
               
               setNotices(list);
 
-              const todayStr = new Date().toDateString();
-              const dismissed = localStorage.getItem(NOTICE_POPUP_DISMISS_KEY);
-              if (list.length > 0 && dismissed !== todayStr) {
-                setActiveNoticePopup(list[0]);
+              // ★★★ [공지 팝업 영구 차단 검사 로직] ★★★
+              // localStorage에 저장된 영구 차단 공지 key 목록 조회
+              let permanentlyDismissed = [];
+              try {
+                permanentlyDismissed = JSON.parse(localStorage.getItem(PERMANENT_DISMISSED_NOTICES_KEY) || "[]");
+              } catch(e) {}
+
+              if (list.length > 0) {
+                const latestNotice = list[0];
+                // 영구 차단 목록에 포함되지 않은 경우에만 팝업 표시
+                if (!permanentlyDismissed.includes(latestNotice.key)) {
+                  setActiveNoticePopup(latestNotice);
+                }
               }
             }
           }
@@ -374,13 +401,26 @@
         }
       };
 
+      // 로그인 시 아나운서 영상 팝업 실행
       useEffect(() => {
+        const todayStr = new Date().toDateString();
+        const dismissedDate = localStorage.getItem(ANCHOR_POPUP_DISMISS_KEY);
+        
+        // 로그인 직후이거나 오늘 하루 닫기를 누르지 않은 경우 실행
+        if (justLoggedIn && dismissedDate !== todayStr) {
+          setShowAnchorGreeting(true);
+          // 아나운서 음성 합성 발화
+          setTimeout(() => {
+            speakAnchorMessage(`DC운용 3팀 여러분! 오늘도 안전하고 힘찬 하루 보내세요! 파이팅!`);
+          }, 600);
+        }
+
         fetchDatabase();
         const weatherInterval = setInterval(fetchRealtimeWeather, 600000);
         return () => clearInterval(weatherInterval);
       }, []);
 
-      // ★★★ [가변 인원 N명 대응] 1년치 365일 전체 연속 스케줄링 시뮬레이션 ★★★
+      // 가변 인원 N명 1년치 스케줄링 시뮬레이션
       const fullYearSimulation = useMemo(() => {
         const numMembers = members.length;
         if (numMembers === 0) return { monthlyData: {}, annualTotals: {} };
@@ -409,7 +449,6 @@
             const currentDay = daysInCurrentMonth[d];
             const isWeekend = (currentDay.getDay() === 0 || currentDay.getDay() === 6);
 
-            // 야간 후 주간 연속 투입 방지
             if (d > 0 && sched[dayDutyPtr % numMembers][d - 1] === 'N') {
               dayDutyPtr++;
             }
@@ -477,7 +516,6 @@
       const schedule = currentMonthData.schedule;
       const summary = currentMonthData.summary;
 
-      // 오늘 당직 인원 현황
       const todayStatus = useMemo(() => {
         const todayDate = today.getDate();
         const dIdx = todayDate - 1;
@@ -506,9 +544,8 @@
         return fullYearSimulation.annualTotals[targetId] || { day: 0, night: 0, weekend: 0, work: 0, off: 0 };
       }, [fullYearSimulation, currentUser, selectedMemberId]);
 
-      // 가변 인원 기준 1인당 연간 목표 당직 횟수 계산
       const targetAnnualDuty = useMemo(() => {
-        const totalDutySpots = 365 * 2; // 주간 365 + 야간 365
+        const totalDutySpots = 365 * 2;
         return members.length > 0 ? Math.round(totalDutySpots / members.length) : 52;
       }, [members.length]);
 
@@ -603,13 +640,11 @@
         }
       };
 
-      // ★★★ [관리자 전용: 인원 추가 및 삭제 기능] ★★★
       const handleOpenRosterModal = () => {
         setTempRoster(JSON.parse(JSON.stringify(members)));
         setIsRosterModalOpen(true);
       };
 
-      // 신규 대원 1명 추가
       const handleAddNewMember = () => {
         const nextNum = tempRoster.length + 1;
         const newId = `user${String(nextNum).padStart(2, '0')}`;
@@ -621,10 +656,9 @@
         setTempRoster([...tempRoster, newMember]);
       };
 
-      // 특정 대원 1명 삭제 (최소 3명 유지)
       const handleDeleteMember = (idx) => {
         if (tempRoster.length <= 3) {
-          alert("무중단 3교대 연속 순환을 위해 최소 3명 이상의 교대 대원이 필요합니다.");
+          alert("무중단 교대 순환을 위해 최소 3명 이상의 대원이 필요합니다.");
           return;
         }
         const target = tempRoster[idx];
@@ -640,7 +674,6 @@
         setTempRoster(updated);
       };
 
-      // Firebase DB 저장
       const handleSaveRoster = async () => {
         if (tempRoster.length < 3) {
           alert("교대 대원은 최소 3명 이상이어야 합니다.");
@@ -658,10 +691,8 @@
           if (res.ok) {
             setMembers(tempRoster);
             setCloudStatus("Firebase DB 연결 정상 (실시간)");
-            alert(`총 ${tempRoster.length}명의 교대 대원 명단이 Firebase DB에 영구 저장되었습니다!\n전체 근무표가 실시간으로 재편성됩니다.`);
+            alert(`총 ${tempRoster.length}명의 교대 대원 명단이 저장되었습니다!`);
             setIsRosterModalOpen(false);
-          } else {
-            alert("저장 실패: Firebase 콘솔 규칙을 확인하십시오.");
           }
         } catch (err) {
           alert("통신 오류: " + err.message);
@@ -802,7 +833,6 @@
                 </button>
               )}
 
-              {/* 관리자: 인원 추가/삭제 및 명단 관리 버튼 */}
               {currentUser.role === 'admin' && (
                 <button
                   onClick={handleOpenRosterModal}
@@ -1151,7 +1181,64 @@
             </div>
           </section>
 
-          {/* 공지사항 팝업 모달 */}
+          {/* ★★★ [신규 1] 여성 아나운서 로그인 응원 동영상 & 음성 팝업 ★★★ */}
+          {showAnchorGreeting && (
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-slate-900 rounded-3xl overflow-hidden w-full max-w-md border border-slate-700 shadow-2xl relative">
+                {/* 상단 비디오 영역 (뉴스룸 아나운서 스톡 비디오) */}
+                <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
+                  <video
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                    src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
+                  <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 bg-red-600/90 text-white rounded-full text-[10px] font-black tracking-widest uppercase">
+                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                    LIVE ANCHOR
+                  </div>
+                </div>
+
+                {/* 하단 메시지 및 브리핑 영역 */}
+                <div className="p-6 text-center">
+                  <span className="text-xs font-bold text-blue-400 font-mono tracking-wider">DC OPS 3 COMMAND GREETING</span>
+                  <h3 className="text-lg font-black text-white mt-1 leading-snug">
+                    "DC운용3팀 여러분!<br />오늘도 안전하고 힘찬 하루 보내세요!"
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+                    3대 데이터센터 무중단 관제를 위해 헌신하시는 대원 여러분을 언제나 응원합니다.
+                  </p>
+
+                  <div className="mt-6 flex flex-col gap-2">
+                    <button
+                      onClick={() => {
+                        window.speechSynthesis?.cancel();
+                        setShowAnchorGreeting(false);
+                      }}
+                      className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg transition"
+                    >
+                      응원 접수 완료! 활기차게 임무 시작
+                    </button>
+                    <button
+                      onClick={() => {
+                        window.speechSynthesis?.cancel();
+                        localStorage.setItem(ANCHOR_POPUP_DISMISS_KEY, new Date().toDateString());
+                        setShowAnchorGreeting(false);
+                      }}
+                      className="text-[11px] text-slate-500 hover:text-slate-300 transition py-1"
+                    >
+                      오늘 하루 이 인사 영상 다시 보지 않기
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ★★★ [신규 2: 영구 차단 기능 탑재된 공지사항 팝업 모달] ★★★ */}
           {activeNoticePopup && (
             <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
               <div className="bg-white rounded-3xl p-6 w-full max-w-lg border-2 border-rose-500 shadow-2xl relative">
@@ -1179,19 +1266,27 @@
                   <label className="flex items-center gap-1.5 cursor-pointer text-slate-600">
                     <input
                       type="checkbox"
-                      id="dismissToday"
-                      className="rounded text-blue-600 focus:ring-0"
+                      id="permanentDismissCheckbox"
+                      className="rounded text-rose-600 focus:ring-0"
                     />
-                    오늘 하루 이 팝업 열지 않기
+                    <strong className="text-rose-600">더 이상 이 팝업 안 보기 (영구 차단)</strong>
                   </label>
                 </div>
 
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={() => {
-                      const chk = document.getElementById("dismissToday");
+                      const chk = document.getElementById("permanentDismissCheckbox");
                       if (chk && chk.checked) {
-                        localStorage.setItem(NOTICE_POPUP_DISMISS_KEY, new Date().toDateString());
+                        // 영구 차단 목록에 해당 공지 key 추가 저장
+                        let currentList = [];
+                        try {
+                          currentList = JSON.parse(localStorage.getItem(PERMANENT_DISMISSED_NOTICES_KEY) || "[]");
+                        } catch(e) {}
+                        if (!currentList.includes(activeNoticePopup.key)) {
+                          currentList.push(activeNoticePopup.key);
+                          localStorage.setItem(PERMANENT_DISMISSED_NOTICES_KEY, JSON.stringify(currentList));
+                        }
                       }
                       setActiveNoticePopup(null);
                     }}
@@ -1511,7 +1606,7 @@
             </div>
           )}
 
-          {/* ★★★ [관리자 전용: 대원 추가/삭제/편집 모달] ★★★ */}
+          {/* 관리자 전용 대원 추가/삭제/관리 모달 */}
           {isRosterModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-4xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
@@ -1521,7 +1616,7 @@
                       👥 교대근무 대원 관리 (가변 인원 편성)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      인원이 늘어나거나 줄어들어도 유연하게 추가/삭제할 수 있으며, 근무표에 실시간 자동 반영됩니다.
+                      인원이 변동되어도 유연하게 추가/삭제할 수 있으며, 근무표에 실시간 자동 반영됩니다.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1629,10 +1724,18 @@
         }
       });
 
-      const handleLoginSuccess = (user) => setCurrentUser(user);
+      const [justLoggedIn, setJustLoggedIn] = useState(false);
+
+      const handleLoginSuccess = (user, fromLogin = false) => {
+        setCurrentUser(user);
+        if (fromLogin) setJustLoggedIn(true);
+      };
+
       const handleLogout = () => {
+        window.speechSynthesis?.cancel();
         localStorage.removeItem(AUTH_SESSION_KEY);
         setCurrentUser(null);
+        setJustLoggedIn(false);
       };
 
       const handleUpdateCurrentUserName = (newName) => {
@@ -1651,6 +1754,7 @@
           currentUser={currentUser}
           onLogout={handleLogout}
           onUpdateCurrentUserName={handleUpdateCurrentUserName}
+          justLoggedIn={justLoggedIn}
         />
       );
     }
