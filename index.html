@@ -26,7 +26,7 @@
 
     // 사령관님의 Firebase Realtime Database
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v9";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v10";
     const NOTICE_POPUP_DISMISS_KEY = "dc3_notice_dismiss_date";
 
     const DEFAULT_MEMBERS = [
@@ -46,7 +46,7 @@
       { id: "user14", name: "대원14", pw: "1234" }
     ];
 
-    // 1. 실시간 DB 연동 로그인 화면
+    // 1. 로그인 게이트웨이
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -67,7 +67,6 @@
         setError("");
 
         try {
-          // 관리자 로그인 (admin / 1234)
           if (trimmedId === "admin" && (trimmedPw === "1234" || trimmedPw === "")) {
             const adminUser = { id: "admin", name: "총괄 관리자", role: "admin" };
             localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(adminUser));
@@ -75,7 +74,6 @@
             return;
           }
 
-          // Firebase DB에서 대원 명단 실시간 조회
           let currentMembers = DEFAULT_MEMBERS;
           try {
             const res = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
@@ -104,7 +102,6 @@
             return;
           }
 
-          // 성공: 실제 매핑된 성함으로 로그인
           const memberUser = {
             id: matched.id,
             name: matched.name,
@@ -114,7 +111,7 @@
           localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(memberUser));
           onLoginSuccess(memberUser);
         } catch (err) {
-          setError("로그인 처리 중 오류 발생: " + err.message);
+          setError("로그인 처리 중 오류: " + err.message);
         } finally {
           setIsVerifying(false);
         }
@@ -128,7 +125,7 @@
                 INTEGRATED OPS COMMAND
               </span>
               <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
-              <p className="text-xs text-slate-500 mt-1">Firebase DB 실시간 동기화 & 팀 공지망</p>
+              <p className="text-xs text-slate-500 mt-1">실시간 기상 관제 및 14인 교대근무망</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -161,7 +158,7 @@
                 disabled={isVerifying}
                 className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2 disabled:opacity-50"
               >
-                {isVerifying ? "계정 인증 및 명단 대조 중..." : "관제 대시보드 로그인"}
+                {isVerifying ? "계정 인증 중..." : "관제 대시보드 로그인"}
               </button>
             </form>
 
@@ -182,16 +179,24 @@
 
       const [members, setMembers] = useState(DEFAULT_MEMBERS);
       const [notices, setNotices] = useState([]);
-      const [cloudStatus, setCloudStatus] = useState("Firebase DB 동기화 확인 중...");
+      const [cloudStatus, setCloudStatus] = useState("DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
 
-      // 모달 제어 상태
+      // ★★★ [실시간 기상 데이터 상태] ★★★
+      const [weatherData, setWeatherData] = useState({
+        ilsan: { temp: "--", humidity: "--", status: "가동 적합 구간", icon: "🌤️", rawCode: 0, loading: true },
+        siksa: { temp: "--", humidity: "--", status: "가동 적합 구간", icon: "☀️", rawCode: 0, loading: true },
+        yangju: { temp: "--", humidity: "--", status: "최적 고효율 구간", icon: "⛅", rawCode: 0, loading: true },
+        lastUpdated: "--:--"
+      });
+
+      // 모달 상태
       const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
       const [isFairnessModalOpen, setIsFairnessModalOpen] = useState(false);
       const [isMyAccountModalOpen, setIsMyAccountModalOpen] = useState(false);
       const [isNoticeListModalOpen, setIsNoticeListModalOpen] = useState(false);
       const [isNoticeWriteModalOpen, setIsNoticeWriteModalOpen] = useState(false);
-      const [activeNoticePopup, setActiveNoticePopup] = useState(null); // 로그인 시 팝업으로 띄울 최신 공지
+      const [activeNoticePopup, setActiveNoticePopup] = useState(null);
 
       // 선택 대원
       const [selectedMemberId, setSelectedMemberId] = useState(currentUser.role === 'admin' ? "user01" : currentUser.id);
@@ -206,11 +211,84 @@
       const [noticeContent, setNoticeContent] = useState("");
       const [noticePriority, setNoticePriority] = useState("긴급");
 
-      // Firebase Realtime DB에서 팀원 명단 및 공지사항 실시간 조회
+      // 날씨 상태코드(WMO Code)를 아이콘으로 변환
+      const getWeatherIcon = (code) => {
+        if (code === 0) return "☀️"; // 맑음
+        if (code === 1 || code === 2) return "🌤️"; // 구름 조금
+        if (code === 3) return "☁️"; // 흐림
+        if (code >= 45 && code <= 48) return "🌫️"; // 안개
+        if (code >= 51 && code <= 67) return "🌧️"; // 비
+        if (code >= 71 && code <= 77) return "❄️"; // 눈
+        if (code >= 80 && code <= 82) return "🌦️"; // 소나기
+        if (code >= 95) return "⛈️"; // 뇌우
+        return "⛅";
+      };
+
+      // 외기 냉방 판정 로직
+      const evaluateFreeCooling = (temp, humidity) => {
+        if (temp <= 18 && humidity <= 65) {
+          return { text: "최적 고효율 구간", badge: "text-emerald-700 bg-emerald-50" };
+        } else if (temp <= 24 && humidity <= 70) {
+          return { text: "가동 적합 구간", badge: "text-blue-700 bg-blue-50" };
+        } else {
+          return { text: "가동 주의 (칠러 전환)", badge: "text-amber-700 bg-amber-50" };
+        }
+      };
+
+      // ★★★ Open-Meteo 실시간 기상 관측 데이터 호출 ★★★
+      const fetchRealtimeWeather = async () => {
+        try {
+          // 일산(37.658, 126.764), 식사(37.674, 126.812), 양주(37.785, 127.045)
+          const lats = "37.658,37.674,37.785";
+          const lons = "126.764,126.812,127.045";
+          const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=Asia%2FSeoul`;
+
+          const res = await fetch(url);
+          if (res.ok) {
+            const dataList = await res.json();
+            // multiple coordinates return array
+            const ilsanRaw = Array.isArray(dataList) ? dataList[0].current : dataList.current;
+            const siksaRaw = Array.isArray(dataList) ? dataList[1].current : dataList.current;
+            const yangjuRaw = Array.isArray(dataList) ? dataList[2].current : dataList.current;
+
+            const nowTime = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+            setWeatherData({
+              ilsan: {
+                temp: ilsanRaw.temperature_2m,
+                humidity: ilsanRaw.relative_humidity_2m,
+                fc: evaluateFreeCooling(ilsanRaw.temperature_2m, ilsanRaw.relative_humidity_2m),
+                icon: getWeatherIcon(ilsanRaw.weather_code),
+                loading: false
+              },
+              siksa: {
+                temp: siksaRaw.temperature_2m,
+                humidity: siksaRaw.relative_humidity_2m,
+                fc: evaluateFreeCooling(siksaRaw.temperature_2m, siksaRaw.relative_humidity_2m),
+                icon: getWeatherIcon(siksaRaw.weather_code),
+                loading: false
+              },
+              yangju: {
+                temp: yangjuRaw.temperature_2m,
+                humidity: yangjuRaw.relative_humidity_2m,
+                fc: evaluateFreeCooling(yangjuRaw.temperature_2m, yangjuRaw.relative_humidity_2m),
+                icon: getWeatherIcon(yangjuRaw.weather_code),
+                loading: false
+              },
+              lastUpdated: nowTime
+            });
+          }
+        } catch (e) {
+          console.warn("실시간 기상 API 연동 지연");
+        }
+      };
+
+      // Firebase Realtime DB 조회
       const fetchDatabase = async () => {
         setIsLoading(true);
         try {
-          // 1) 대원 명단
+          fetchRealtimeWeather(); // 기상 데이터 동시 갱신
+
           const resMembers = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
           if (resMembers.ok) {
             const data = await resMembers.json();
@@ -225,12 +303,10 @@
             }
           }
 
-          // 2) 팀 공지사항 조회
           const resNotices = await fetch(`${FIREBASE_DB_URL}/notices.json`, { cache: "no-cache" });
           if (resNotices.ok) {
             const noticeData = await resNotices.json();
             if (noticeData) {
-              // Firebase 객체 -> 배열 변환 및 최신순 정렬
               const list = Object.keys(noticeData).map(key => ({
                 key,
                 ...noticeData[key]
@@ -238,19 +314,17 @@
               
               setNotices(list);
 
-              // 로그인 직후 가장 최신의 중요 공지가 있다면 팝업 표시 검토
               const todayStr = new Date().toDateString();
               const dismissed = localStorage.getItem(NOTICE_POPUP_DISMISS_KEY);
               if (list.length > 0 && dismissed !== todayStr) {
-                // 가장 최신 공지 1건 팝업
                 setActiveNoticePopup(list[0]);
               }
             }
           }
 
-          setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
+          setCloudStatus("Firebase DB 연결 정상 (실시간)");
         } catch (e) {
-          setCloudStatus("DB 통신 실패: 네트워크 상태 확인");
+          setCloudStatus("DB 통신 실패: 네트워크 확인");
         } finally {
           setIsLoading(false);
         }
@@ -258,6 +332,9 @@
 
       useEffect(() => {
         fetchDatabase();
+        // 10분마다 실시간 날씨 자동 갱신
+        const weatherInterval = setInterval(fetchRealtimeWeather, 600000);
+        return () => clearInterval(weatherInterval);
       }, []);
 
       // 1년치 365일 전체 연속 스케줄링 시뮬레이션
@@ -375,7 +452,6 @@
         return { dayWorker, nightWorker, restWorkers, workWorkers, todayDate };
       }, [schedule, members, daysInMonth]);
 
-      // 로그인 본인의 당월 통계
       const myStat = useMemo(() => {
         if (currentUser.role === 'admin') return null;
         return summary.find(s => s.id === currentUser.id);
@@ -386,7 +462,6 @@
         return fullYearSimulation.annualTotals[targetId] || { day: 0, night: 0, weekend: 0, work: 0, off: 0 };
       }, [fullYearSimulation, currentUser, selectedMemberId]);
 
-      // 공평성 분석 브리핑
       const fairnessAnalysis = useMemo(() => {
         const targetId = currentUser.role === 'admin' ? selectedMemberId : currentUser.id;
         const targetMember = members.find(m => m.id === targetId);
@@ -425,7 +500,6 @@
         };
       }, [fullYearSimulation, members, currentUser, selectedMemberId]);
 
-      // 공지사항 등록 핸들러 (누구나 작성 가능)
       const handleCreateNotice = async (e) => {
         e.preventDefault();
         if (!noticeTitle.trim() || !noticeContent.trim()) {
@@ -445,7 +519,6 @@
             timestamp: Date.now()
           };
 
-          // Firebase Realtime DB POST 저장
           const res = await fetch(`${FIREBASE_DB_URL}/notices.json`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -457,7 +530,7 @@
             setNoticeTitle("");
             setNoticeContent("");
             setIsNoticeWriteModalOpen(false);
-            fetchDatabase(); // 목록 즉시 재조회
+            fetchDatabase();
           } else {
             alert("공지 등록 실패: Firebase DB 권한을 확인하십시오.");
           }
@@ -468,7 +541,6 @@
         }
       };
 
-      // 공지 삭제 (작성자 또는 관리자 전용)
       const handleDeleteNotice = async (noticeKey) => {
         if (!confirm("해당 공지를 삭제하시겠습니까?")) return;
         setIsLoading(true);
@@ -483,7 +555,6 @@
         }
       };
 
-      // 관리자: 팀원 명단/계정 일괄 관리 모달 열기
       const handleOpenRosterModal = () => {
         setTempRoster(JSON.parse(JSON.stringify(members)));
         setIsRosterModalOpen(true);
@@ -506,7 +577,7 @@
 
           if (res.ok) {
             setMembers(tempRoster);
-            setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
+            setCloudStatus("Firebase DB 연결 정상 (실시간)");
             alert("대원 명단 및 계정 정보가 Firebase DB에 영구 저장되었습니다!");
             setIsRosterModalOpen(false);
           } else {
@@ -519,7 +590,6 @@
         }
       };
 
-      // 대원 본인 ID/PW 변경
       const handleSaveMyAccount = async () => {
         if (!newMyId.trim()) {
           alert("아이디를 입력해 주십시오.");
@@ -592,7 +662,7 @@
 
       return (
         <div className="max-w-[1700px] mx-auto px-4 py-6">
-          {/* 상단 네비게이션 헤더 */}
+          {/* 상단 헤더 */}
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
             <div className="flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${isLoading ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></span>
@@ -608,7 +678,6 @@
             </div>
 
             <div className="flex items-center flex-wrap gap-2">
-              {/* 팀 공지 확인 메뉴 버튼 */}
               <button
                 onClick={() => setIsNoticeListModalOpen(true)}
                 className="px-3.5 py-2 text-xs font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition flex items-center gap-1.5"
@@ -621,7 +690,6 @@
                 )}
               </button>
 
-              {/* 공지 등록 버튼 */}
               <button
                 onClick={() => setIsNoticeWriteModalOpen(true)}
                 className="px-3.5 py-2 text-xs font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md shadow-rose-500/20 transition flex items-center gap-1.5"
@@ -708,60 +776,84 @@
             </div>
           )}
 
-          {/* 1. 상단 3개 센터 기상 정보 */}
+          {/* ★★★ 1. 상단 3개 센터 실시간 기상 및 외기 관제 (Open-Meteo API 실시간 바인딩) ★★★ */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
-                <span className="text-blue-600">●</span> 3개 거점 센터 기상 & 외기 냉방(Free Cooling) 지수
+                <span className="text-blue-600">●</span> 3개 거점 센터 실시간 기상 & 외기 냉방(Free Cooling) 지수
               </h2>
-              <span className="text-xs text-slate-500">Open-Meteo 실시간 관측</span>
+              <span className="text-xs text-slate-500 flex items-center gap-1.5 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                실시간 연동 중 (갱신: {weatherData.lastUpdated})
+              </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
+              {/* 일산 센터 */}
+              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">거점 1</span>
-                  <span className="text-xl">🌤️</span>
+                  <span className="text-2xl">{weatherData.ilsan.icon}</span>
                 </div>
                 <h3 className="text-lg font-black text-slate-900 mt-1">일산 센터</h3>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900 font-mono">21.5°C</span>
-                  <span className="text-xs font-bold text-slate-500">습도 52%</span>
+                  <span className="text-3xl font-black text-slate-900 font-mono">
+                    {weatherData.ilsan.temp !== "--" ? `${weatherData.ilsan.temp}°C` : "계측 중..."}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    습도 {weatherData.ilsan.humidity}%
+                  </span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">외기 냉방:</span>
-                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">가동 적합 구간</span>
+                  <span className={`font-bold px-2 py-0.5 rounded ${weatherData.ilsan.fc?.badge || 'text-slate-600 bg-slate-50'}`}>
+                    {weatherData.ilsan.fc?.text || "판정 중"}
+                  </span>
                 </div>
               </div>
 
-              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
+              {/* 식사 센터 */}
+              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">거점 2</span>
-                  <span className="text-xl">☀️</span>
+                  <span className="text-2xl">{weatherData.siksa.icon}</span>
                 </div>
                 <h3 className="text-lg font-black text-slate-900 mt-1">식사 센터</h3>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900 font-mono">22.0°C</span>
-                  <span className="text-xs font-bold text-slate-500">습도 49%</span>
+                  <span className="text-3xl font-black text-slate-900 font-mono">
+                    {weatherData.siksa.temp !== "--" ? `${weatherData.siksa.temp}°C` : "계측 중..."}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    습도 {weatherData.siksa.humidity}%
+                  </span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">외기 냉방:</span>
-                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">가동 적합 구간</span>
+                  <span className={`font-bold px-2 py-0.5 rounded ${weatherData.siksa.fc?.badge || 'text-slate-600 bg-slate-50'}`}>
+                    {weatherData.siksa.fc?.text || "판정 중"}
+                  </span>
                 </div>
               </div>
 
-              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm">
+              {/* 양주 센터 */}
+              <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">거점 3</span>
-                  <span className="text-xl">⛅</span>
+                  <span className="text-2xl">{weatherData.yangju.icon}</span>
                 </div>
                 <h3 className="text-lg font-black text-slate-900 mt-1">양주 센터</h3>
                 <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-slate-900 font-mono">19.8°C</span>
-                  <span className="text-xs font-bold text-slate-500">습도 55%</span>
+                  <span className="text-3xl font-black text-slate-900 font-mono">
+                    {weatherData.yangju.temp !== "--" ? `${weatherData.yangju.temp}°C` : "계측 중..."}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    습도 {weatherData.yangju.humidity}%
+                  </span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">외기 냉방:</span>
-                  <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded">최적 고효율 구간</span>
+                  <span className={`font-bold px-2 py-0.5 rounded ${weatherData.yangju.fc?.badge || 'text-slate-600 bg-slate-50'}`}>
+                    {weatherData.yangju.fc?.text || "판정 중"}
+                  </span>
                 </div>
               </div>
             </div>
@@ -979,7 +1071,7 @@
             </div>
           </section>
 
-          {/* ★★★ [신규 모달 1] 로그인 직후 자동 공지 팝업 브리핑 ★★★ */}
+          {/* 공지사항 팝업 모달 */}
           {activeNoticePopup && (
             <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
               <div className="bg-white rounded-3xl p-6 w-full max-w-lg border-2 border-rose-500 shadow-2xl relative">
@@ -1032,7 +1124,7 @@
             </div>
           )}
 
-          {/* ★★★ [신규 모달 2] 팀 공지 작성 모달 ★★★ */}
+          {/* 팀 공지 작성 모달 */}
           {isNoticeWriteModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-lg border border-slate-300 shadow-2xl">
@@ -1101,7 +1193,7 @@
             </div>
           )}
 
-          {/* ★★★ [신규 모달 3] 팀내 주요 공지내용 확인 (목록 및 열람) ★★★ */}
+          {/* 팀내 주요 공지내용 확인 모달 */}
           {isNoticeListModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-3xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
@@ -1177,7 +1269,7 @@
             </div>
           )}
 
-          {/* 모달 4: 1년치 공평성 검증 창 */}
+          {/* 1년치 공평성 검증 모달 */}
           {isFairnessModalOpen && fairnessAnalysis && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-4xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
@@ -1288,7 +1380,7 @@
             </div>
           )}
 
-          {/* 모달 5: 대원 본인 ID/PW 변경 */}
+          {/* 대원 본인 ID/PW 변경 모달 */}
           {isMyAccountModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-md border border-slate-300 shadow-2xl">
@@ -1341,7 +1433,7 @@
             </div>
           )}
 
-          {/* 모달 6: 관리자 전용 팀원 계정/명단 관리 */}
+          {/* 관리자 전용 팀원 계정/명단 관리 모달 */}
           {isRosterModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-3xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
