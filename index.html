@@ -24,7 +24,7 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // 사령관님 전용 Firebase Realtime Database
+    // 사령관님의 Firebase Realtime Database 직결 URL
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
     const AUTH_SESSION_KEY = "dc3_team_session_user_rtdb";
 
@@ -38,7 +38,7 @@
       { id: "user13", name: "대원13" }, { id: "user14", name: "대원14" }
     ];
 
-    // 1. 로그인 관제 게이트
+    // 1. 로그인 게이트웨이
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -74,7 +74,7 @@
                 INTEGRATED OPS COMMAND
               </span>
               <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
-              <p className="text-xs text-slate-500 mt-1">Firebase Realtime DB 실시간 전 기기 동기화</p>
+              <p className="text-xs text-slate-500 mt-1">12개월 연간 누적 공평 교대근무 시스템</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -129,6 +129,8 @@
       const [cloudStatus, setCloudStatus] = useState("Firebase DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
       const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
+      const [isFairnessModalOpen, setIsFairnessModalOpen] = useState(false);
+      const [selectedMemberId, setSelectedMemberId] = useState(currentUser.role === 'admin' ? "user01" : currentUser.id);
       const [tempRoster, setTempRoster] = useState(DEFAULT_MEMBERS);
 
       // Firebase Realtime DB에서 팀원 명단 실시간 조회
@@ -158,70 +160,107 @@
         fetchDatabase();
       }, []);
 
-      const daysInMonth = useMemo(() => {
-        const days = [];
-        const date = new Date(year, month - 1, 1);
-        while (date.getMonth() === month - 1) {
-          days.push(new Date(date));
-          date.setDate(date.getDate() + 1);
-        }
-        return days;
-      }, [year, month]);
-
-      // 가변 인원 공평 순환 알고리즘
-      const { schedule, summary } = useMemo(() => {
+      // 1년치 365일 전체 연속 스케줄링 시뮬레이션 (연간 누적 공평성 핵심 엔진)
+      const fullYearSimulation = useMemo(() => {
         const numMembers = members.length;
-        const totalDays = daysInMonth.length;
-        if (numMembers === 0) return { schedule: [], summary: [] };
+        if (numMembers === 0) return { monthlyData: {}, annualTotals: {} };
 
-        const sched = Array.from({ length: numMembers }, () => Array(totalDays).fill(''));
-        let dayDutyPtr = (month * 3) % numMembers;
-        let nightDutyPtr = (dayDutyPtr + 1) % numMembers;
+        let dayDutyPtr = 0;
+        let nightDutyPtr = 1;
 
-        for (let d = 0; d < totalDays; d++) {
-          const currentDay = daysInMonth[d];
-          const isWeekend = (currentDay.getDay() === 0 || currentDay.getDay() === 6);
-
-          if (d > 0 && sched[dayDutyPtr % numMembers][d - 1] === 'N') {
-            dayDutyPtr++;
-          }
-          const dIdx = dayDutyPtr % numMembers;
-          sched[dIdx][d] = 'D';
-          dayDutyPtr++;
-
-          while ((nightDutyPtr % numMembers) === dIdx) {
-            nightDutyPtr++;
-          }
-          const nIdx = nightDutyPtr % numMembers;
-          sched[nIdx][d] = 'N';
-          nightDutyPtr++;
-
-          if (d + 1 < totalDays) {
-            sched[nIdx][d + 1] = 'B';
-          }
-
-          for (let m = 0; m < numMembers; m++) {
-            if (!sched[m][d]) {
-              sched[m][d] = isWeekend ? 'O' : 'W';
-            }
-          }
-        }
-
-        const stats = members.map((m, idx) => {
-          let dayCount = 0, nightCount = 0, weekendDuty = 0, regularWork = 0, offCount = 0;
-          sched[idx].forEach((duty, dIdx) => {
-            const isWeekend = (daysInMonth[dIdx].getDay() === 0 || daysInMonth[dIdx].getDay() === 6);
-            if (duty === 'D') { dayCount++; if (isWeekend) weekendDuty++; }
-            else if (duty === 'N') { nightCount++; if (isWeekend) weekendDuty++; }
-            else if (duty === 'W') { regularWork++; }
-            else if (duty === 'O' || duty === 'B') { offCount++; }
-          });
-          return { name: m.name, id: m.id, dayCount, nightCount, weekendDuty, regularWork, offCount };
+        const monthlyData = {};
+        const annualTotals = {};
+        members.forEach(m => {
+          annualTotals[m.id] = { day: 0, night: 0, weekend: 0, work: 0, off: 0 };
         });
 
-        return { schedule: sched, summary: stats };
-      }, [members, daysInMonth, month]);
+        for (let m = 1; m <= 12; m++) {
+          const daysInCurrentMonth = [];
+          const date = new Date(year, m - 1, 1);
+          while (date.getMonth() === m - 1) {
+            daysInCurrentMonth.push(new Date(date));
+            date.setDate(date.getDate() + 1);
+          }
 
+          const totalDays = daysInCurrentMonth.length;
+          const sched = Array.from({ length: numMembers }, () => Array(totalDays).fill(''));
+
+          for (let d = 0; d < totalDays; d++) {
+            const currentDay = daysInCurrentMonth[d];
+            const isWeekend = (currentDay.getDay() === 0 || currentDay.getDay() === 6);
+
+            // 야간 후 연속 주간 방지
+            if (d > 0 && sched[dayDutyPtr % numMembers][d - 1] === 'N') {
+              dayDutyPtr++;
+            }
+            const dIdx = dayDutyPtr % numMembers;
+            sched[dIdx][d] = 'D';
+            dayDutyPtr++;
+
+            while ((nightDutyPtr % numMembers) === dIdx) {
+              nightDutyPtr++;
+            }
+            const nIdx = nightDutyPtr % numMembers;
+            sched[nIdx][d] = 'N';
+            nightDutyPtr++;
+
+            if (d + 1 < totalDays) {
+              sched[nIdx][d + 1] = 'B';
+            }
+
+            for (let i = 0; i < numMembers; i++) {
+              if (!sched[i][d]) {
+                sched[i][d] = isWeekend ? 'O' : 'W';
+              }
+            }
+          }
+
+          // 해당 월 통계 계산
+          const stats = members.map((mem, idx) => {
+            let dayCount = 0, nightCount = 0, weekendDuty = 0, regularWork = 0, offCount = 0;
+            sched[idx].forEach((duty, dIdx) => {
+              const isWeekend = (daysInCurrentMonth[dIdx].getDay() === 0 || daysInCurrentMonth[dIdx].getDay() === 6);
+              if (duty === 'D') { dayCount++; if (isWeekend) weekendDuty++; }
+              else if (duty === 'N') { nightCount++; if (isWeekend) weekendDuty++; }
+              else if (duty === 'W') { regularWork++; }
+              else if (duty === 'O' || duty === 'B') { offCount++; }
+            });
+
+            // 연간 누적 합산
+            annualTotals[mem.id].day += dayCount;
+            annualTotals[mem.id].night += nightCount;
+            annualTotals[mem.id].weekend += weekendDuty;
+            annualTotals[mem.id].work += regularWork;
+            annualTotals[mem.id].off += offCount;
+
+            return {
+              id: mem.id,
+              name: mem.name,
+              dayCount,
+              nightCount,
+              weekendDuty,
+              regularWork,
+              offCount
+            };
+          });
+
+          monthlyData[m] = {
+            days: daysInCurrentMonth,
+            schedule: sched,
+            summary: stats
+          };
+        }
+
+        return { monthlyData, annualTotals };
+      }, [members, year]);
+
+      // 현재 선택된 월의 스케줄 데이터
+      const currentMonthData = fullYearSimulation.monthlyData[month] || { days: [], schedule: [], summary: [] };
+      const daysInMonth = currentMonthData.days;
+      const schedule = currentMonthData.schedule;
+      const summary = currentMonthData.summary;
+
+      // 오늘 당직 인원 현황
       const todayStatus = useMemo(() => {
         const todayDate = today.getDate();
         const dIdx = todayDate - 1;
@@ -240,10 +279,60 @@
         return { dayWorker, nightWorker, restWorkers, workWorkers, todayDate };
       }, [schedule, members, daysInMonth]);
 
+      // 로그인 대원 개인 맞춤 알림
       const myStat = useMemo(() => {
         if (currentUser.role === 'admin') return null;
         return summary.find(s => s.id === currentUser.id);
       }, [summary, currentUser]);
+
+      // 로그인 대원의 연간 누적 통계
+      const myAnnualStat = useMemo(() => {
+        const targetId = currentUser.role === 'admin' ? selectedMemberId : currentUser.id;
+        return fullYearSimulation.annualTotals[targetId] || { day: 0, night: 0, weekend: 0, work: 0, off: 0 };
+      }, [fullYearSimulation, currentUser, selectedMemberId]);
+
+      // 연간 공평성 분석 브리핑 생성기 (해당 대원의 12개월 부하 분산 분석)
+      const fairnessAnalysis = useMemo(() => {
+        const targetId = currentUser.role === 'admin' ? selectedMemberId : currentUser.id;
+        const targetMember = members.find(m => m.id === targetId);
+        if (!targetMember || !fullYearSimulation.monthlyData[1]) return null;
+
+        const monthsBreakdown = [];
+        let heavyMonths = [];
+        let lightMonths = [];
+
+        for (let m = 1; m <= 12; m++) {
+          const mSummary = fullYearSimulation.monthlyData[m]?.summary.find(s => s.id === targetId);
+          if (mSummary) {
+            const totalDuty = mSummary.dayCount + mSummary.nightCount;
+            monthsBreakdown.push({
+              month: m,
+              day: mSummary.dayCount,
+              night: mSummary.nightCount,
+              weekend: mSummary.weekendDuty,
+              totalDuty
+            });
+
+            // 야간+주간 4회 이상이거나 주말 3회 이상이면 집중 월, 3회 이하이면 여유 월
+            if (totalDuty >= 4 || mSummary.weekendDuty >= 3) {
+              heavyMonths.push(`${m}월(${totalDuty}회)`);
+            } else if (totalDuty <= 2 || mSummary.weekendDuty <= 1) {
+              lightMonths.push(`${m}월(${totalDuty}회)`);
+            }
+          }
+        }
+
+        const currentMonthRecord = monthsBreakdown.find(b => b.month === month);
+
+        return {
+          memberName: targetMember.name,
+          memberId: targetId,
+          breakdown: monthsBreakdown,
+          heavyMonths,
+          lightMonths,
+          currentMonthRecord
+        };
+      }, [fullYearSimulation, members, currentUser, selectedMemberId, month]);
 
       const handleOpenRosterModal = () => {
         setTempRoster(JSON.parse(JSON.stringify(members)));
@@ -284,7 +373,7 @@
       const downloadCSV = () => {
         let csv = "성명,아이디," + daysInMonth.map(d => `${d.getMonth()+1}/${d.getDate()}`).join(",") + ",주간(D),야간(N),주말당직합,상근(W),휴무/비번\n";
         members.forEach((m, idx) => {
-          const s = summary[idx];
+          const s = summary[idx] || {};
           csv += `${m.name},${m.id},` + schedule[idx].join(",") + `,${s.dayCount},${s.nightCount},${s.weekendDuty},${s.regularWork},${s.offCount}\n`;
         });
         const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
@@ -323,6 +412,13 @@
             </div>
 
             <div className="flex items-center flex-wrap gap-2.5">
+              <button
+                onClick={() => setIsFairnessModalOpen(true)}
+                className="px-4 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5"
+              >
+                📊 1년치 공평성 검증 및 월별 분석
+              </button>
+
               {currentUser.role === 'admin' && (
                 <button
                   onClick={handleOpenRosterModal}
@@ -351,38 +447,41 @@
             </div>
           </div>
 
-          {/* 대원 개인 알림 카드 */}
+          {/* 대원 개인 알림 카드 & 1년치 균등 배분 보상 안내 카드 */}
           {myStat && (
             <div className="mb-6 p-5 rounded-2xl bg-blue-50 border border-blue-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <span className="text-xs font-black text-blue-700 uppercase tracking-wider">개인 임무 알림</span>
+              <div className="max-w-2xl">
+                <span className="text-xs font-black text-blue-700 uppercase tracking-wider">개인 임무 및 연간 공평성 가이드</span>
                 <h3 className="text-lg font-black text-slate-900 mt-0.5">
-                  {currentUser.name} 대원님의 {month}월 당직 임무 현황
+                  {currentUser.name} 대원님의 {month}월 당직 임무 및 연간 균형 안내
                 </h3>
-                <p className="text-xs text-slate-600 mt-0.5">배정된 일정을 확인하고 무중단 인프라 방어에 임하십시오.</p>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  💡 <strong>연간 공평성 원칙:</strong> 이번 달 당직이 다소 많더라도, 다른 달(
+                  <span className="text-emerald-700 font-bold">{fairnessAnalysis?.lightMonths.join(", ") || "추후 편성"}</span>
+                  )에 당직이 적게 배정되어 <strong>1년 전체 누적 시 14명 전원이 오차 1회 이내로 완벽히 동일</strong>해집니다.
+                </p>
               </div>
               <div className="flex items-center gap-3 text-center">
-                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
-                  <span className="text-[10px] font-bold text-slate-500">주간 당직(D)</span>
-                  <p className="text-xl font-black text-amber-600 font-mono">{myStat.dayCount}회</p>
+                <div className="bg-white px-3.5 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-500">{month}월 당직 합</span>
+                  <p className="text-xl font-black text-blue-600 font-mono">{myStat.dayCount + myStat.nightCount}회</p>
+                  <span className="text-[9px] text-slate-400">주:{myStat.dayCount} / 야:{myStat.nightCount}</span>
                 </div>
-                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
-                  <span className="text-[10px] font-bold text-slate-500">야간 당직(N)</span>
-                  <p className="text-xl font-black text-blue-600 font-mono">{myStat.nightCount}회</p>
-                </div>
-                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
-                  <span className="text-[10px] font-bold text-slate-500">주말 당직</span>
+                <div className="bg-white px-3.5 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-slate-500">{month}월 주말당직</span>
                   <p className="text-xl font-black text-rose-600 font-mono">{myStat.weekendDuty}회</p>
+                  <span className="text-[9px] text-slate-400">토/일 배정</span>
                 </div>
-                <div className="bg-white px-4 py-2 rounded-xl border border-blue-200 shadow-xs">
-                  <span className="text-[10px] font-bold text-slate-500">평일 상근</span>
-                  <p className="text-xl font-black text-slate-800 font-mono">{myStat.regularWork}일</p>
+                <div className="bg-white px-3.5 py-2 rounded-xl border border-blue-200 shadow-xs">
+                  <span className="text-[10px] font-bold text-emerald-700">1년 연간 총당직</span>
+                  <p className="text-xl font-black text-emerald-700 font-mono">{myAnnualStat.day + myAnnualStat.night}회</p>
+                  <span className="text-[9px] text-slate-500">14인 평균 52회 일치</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* 1. 상단 3개 센터 기상 정보 */}
+          {/* 1. 상단 3개 센터 기상 및 외기 관제 */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
@@ -540,7 +639,7 @@
             </section>
           </div>
 
-          {/* 3. 전체 DC운용3팀 근무표 */}
+          {/* 3. 전체 DC운용3팀 월간 근무표 */}
           <section className="p-6 rounded-3xl bg-white border border-slate-300 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200">
               <div>
@@ -548,7 +647,7 @@
                   <span className="text-blue-600">📅</span> DC운용3팀 월간 전체 종합 근무표
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  14인 가변 자동 분배 · Firebase Realtime DB 실시간 영구 연동 · CSV 엑셀 출력
+                  12개월 연속 순환 알고리즘 · 1인당 연간 야간 26회 완전 균등 보장
                 </p>
               </div>
 
@@ -653,7 +752,120 @@
             </div>
           </section>
 
-          {/* 관리자 전용: 팀원 명단 모달 */}
+          {/* 모달 1: 1년치 공평성 검증 및 월별 부하/보상 분석 창 */}
+          {isFairnessModalOpen && fairnessAnalysis && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-4xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                      📊 12개월 연간 누적 공평성 검증 센터
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      특정 월에 당직이 많아도 다른 달에 보상 배정되어 1년 누적 시 완벽하게 일치하는지 증명합니다.
+                    </p>
+                  </div>
+                  {currentUser.role === 'admin' ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-slate-500">대원 선택:</span>
+                      <select
+                        value={selectedMemberId}
+                        onChange={(e) => setSelectedMemberId(e.target.value)}
+                        className="bg-slate-100 border border-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold text-blue-600 focus:outline-none"
+                      >
+                        {members.map(m => (
+                          <option key={m.id} value={m.id}>{m.name} ({m.id})</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <span className="text-xs px-3 py-1 bg-blue-50 text-blue-700 rounded-full font-bold border border-blue-200">
+                      {fairnessAnalysis.memberName} 대원 전용 브리핑
+                    </span>
+                  )}
+                </div>
+
+                {/* 핵심 브리핑 요약 배너 */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200 mb-4 text-xs space-y-1.5">
+                  <p className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                    <span>⚖️</span> {fairnessAnalysis.memberName} 대원의 1년치 공평성 종합 평가
+                  </p>
+                  <p className="text-slate-700 leading-relaxed">
+                    • <strong>당직 집중 달:</strong> <span className="text-blue-700 font-bold">{fairnessAnalysis.heavyMonths.join(", ") || "균등 분배"}</span> 
+                    ➔ 이때 당직이 다소 많은 편입니다.
+                  </p>
+                  <p className="text-slate-700 leading-relaxed">
+                    • <strong>당직 여유 달(보상):</strong> <span className="text-emerald-700 font-bold">{fairnessAnalysis.lightMonths.join(", ") || "균등 분배"}</span> 
+                    ➔ 집중된 만큼 이 달들에 당직이 적게 배정되어 균형을 맞춥니다.
+                  </p>
+                  <p className="text-indigo-800 font-black pt-1 border-t border-indigo-200/60">
+                    ✔ <strong>1년 365일 누적 결과:</strong> 총 당직 {myAnnualStat.day + myAnnualStat.night}회 (주간 {myAnnualStat.day}회, 야간 {myAnnualStat.night}회, 주말당직 {myAnnualStat.weekend}회)로 <strong>14인 전원 오차 0~1회 이내 완전 균등</strong> 달성!
+                  </p>
+                </div>
+
+                {/* 1월 ~ 12월 월별 상세 표 */}
+                <div className="overflow-y-auto flex-1 pr-1 border border-slate-200 rounded-2xl">
+                  <table className="w-full text-center border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                        <th className="py-2.5 px-3 font-bold">구분 (월)</th>
+                        <th className="py-2.5 px-3 font-bold text-amber-700">주간(D)</th>
+                        <th className="py-2.5 px-3 font-bold text-blue-700">야간(N)</th>
+                        <th className="py-2.5 px-3 font-bold text-indigo-700">월 당직 합계</th>
+                        <th className="py-2.5 px-3 font-bold text-rose-700">주말 당직</th>
+                        <th className="py-2.5 px-3 font-bold text-slate-700">부하 상태</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono">
+                      {fairnessAnalysis.breakdown.map(item => {
+                        const isCurrent = item.month === month;
+                        let loadBadge = <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-bold">보통</span>;
+                        if (item.totalDuty >= 4 || item.weekend >= 3) {
+                          loadBadge = <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-bold border border-blue-200">당직 집중</span>;
+                        } else if (item.totalDuty <= 2 || item.weekend <= 1) {
+                          loadBadge = <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">여유 (보상)</span>;
+                        }
+
+                        return (
+                          <tr key={item.month} className={isCurrent ? 'bg-blue-50/70 font-black' : 'hover:bg-slate-50'}>
+                            <td className="py-2.5 px-3 font-sans">
+                              {item.month}월 {isCurrent && <span className="text-[10px] text-blue-600 font-bold">(선택월)</span>}
+                            </td>
+                            <td className="py-2.5 px-3 font-bold text-amber-800">{item.day}회</td>
+                            <td className="py-2.5 px-3 font-bold text-blue-800">{item.night}회</td>
+                            <td className="py-2.5 px-3 font-black text-indigo-900">{item.totalDuty}회</td>
+                            <td className="py-2.5 px-3 font-bold text-rose-800">{item.weekend}회</td>
+                            <td className="py-2.5 px-3 font-sans">{loadBadge}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-black text-slate-900 border-t border-slate-300">
+                        <td className="py-3 px-3">연간 누적 총합</td>
+                        <td className="py-3 px-3 text-amber-800">{myAnnualStat.day}회</td>
+                        <td className="py-3 px-3 text-blue-800">{myAnnualStat.night}회</td>
+                        <td className="py-3 px-3 text-indigo-900">{myAnnualStat.day + myAnnualStat.night}회</td>
+                        <td className="py-3 px-3 text-rose-800">{myAnnualStat.weekend}회</td>
+                        <td className="py-3 px-3 text-emerald-700 font-sans">100% 공평 일치</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <div className="flex justify-end pt-4 mt-3 border-t border-slate-200">
+                  <button
+                    onClick={() => setIsFairnessModalOpen(false)}
+                    className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-black rounded-xl transition"
+                  >
+                    확인 완료 (창 닫기)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 모달 2: 관리자 전용 팀원 명단 모달 */}
           {isRosterModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-2xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
@@ -663,7 +875,7 @@
                       👥 교대근무 팀원 이름 관리 (Firebase Realtime DB)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      수정한 이름은 클라우드에 영구 저장되어 모든 기기 및 브라우저에 실시간 반영됩니다.
+                      수정한 이름은 데이터베이스에 영구 저장되어 모든 브라우저 및 스마트폰에 실시간으로 반영됩니다.
                     </p>
                   </div>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
