@@ -16,6 +16,11 @@
     ::-webkit-scrollbar { height: 7px; width: 7px; }
     ::-webkit-scrollbar-track { background: #e2e8f0; }
     ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.03); }
+    }
+    .animate-glow { animation: pulse-subtle 4s infinite ease-in-out; }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 min-h-screen antialiased">
@@ -26,7 +31,7 @@
 
     // 사령관님의 Firebase Realtime Database
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v10";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v11";
     const NOTICE_POPUP_DISMISS_KEY = "dc3_notice_dismiss_date";
 
     const DEFAULT_MEMBERS = [
@@ -46,7 +51,7 @@
       { id: "user14", name: "대원14", pw: "1234" }
     ];
 
-    // 1. 로그인 게이트웨이
+    // 1. 프리미엄 사이버 관제 스타일 로그인 게이트웨이
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -59,7 +64,7 @@
         const trimmedPw = pw.trim();
 
         if (!trimmedId) {
-          setError("아이디를 입력하십시오.");
+          setError("아이디를 입력해 주십시오.");
           return;
         }
 
@@ -67,6 +72,7 @@
         setError("");
 
         try {
+          // 총괄 관리자 계정 (admin / 1234)
           if (trimmedId === "admin" && (trimmedPw === "1234" || trimmedPw === "")) {
             const adminUser = { id: "admin", name: "총괄 관리자", role: "admin" };
             localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(adminUser));
@@ -90,14 +96,14 @@
           const matched = currentMembers.find(m => m.id === trimmedId);
 
           if (!matched) {
-            setError(`등록되지 않은 아이디입니다: [${trimmedId}]`);
+            setError(`시스템에 등록되지 않은 호출 ID입니다: [${trimmedId}]`);
             setIsVerifying(false);
             return;
           }
 
           const validPw = matched.pw || "1234";
           if (trimmedPw !== validPw && trimmedPw !== "") {
-            setError("비밀번호가 일치하지 않습니다.");
+            setError("인가 비밀번호가 일치하지 않습니다.");
             setIsVerifying(false);
             return;
           }
@@ -111,60 +117,104 @@
           localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(memberUser));
           onLoginSuccess(memberUser);
         } catch (err) {
-          setError("로그인 처리 중 오류: " + err.message);
+          setError("인증 통신 오류: " + err.message);
         } finally {
           setIsVerifying(false);
         }
       };
 
       return (
-        <div className="min-h-screen flex items-center justify-center px-4 bg-slate-200">
-          <div className="w-full max-w-md p-8 rounded-3xl bg-white border border-slate-300 shadow-2xl relative">
+        <div className="min-h-screen flex items-center justify-center px-4 bg-slate-950 relative overflow-hidden">
+          {/* 하이테크 배경 장식 효과 */}
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/15 rounded-full blur-3xl animate-glow pointer-events-none"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl animate-glow pointer-events-none"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none"></div>
+
+          <div className="w-full max-w-md p-8 sm:p-10 rounded-3xl bg-slate-900/80 backdrop-blur-2xl border border-slate-700/60 shadow-2xl shadow-blue-950/50 relative z-10">
+            {/* 상단 엠블럼 및 헤더 */}
             <div className="text-center mb-8">
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-black tracking-widest bg-blue-50 text-blue-600 border border-blue-200 mb-3">
-                INTEGRATED OPS COMMAND
-              </span>
-              <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
-              <p className="text-xs text-slate-500 mt-1">실시간 기상 관제 및 14인 교대근무망</p>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-black tracking-widest bg-blue-500/10 text-blue-400 border border-blue-500/30 mb-3 shadow-inner">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                MISSION CONTROL PORTAL
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center justify-center gap-2">
+                <span>DC운용3팀</span>
+                <span className="text-blue-500 text-lg sm:text-xl font-mono">HQ</span>
+              </h1>
+              <p className="text-xs text-slate-400 mt-1.5 font-medium">
+                일산 · 식사 · 양주 3대 센터 무중단 전력 공조 방어망
+              </p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">아이디 (ID)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  접속 식별 ID
+                </label>
                 <input
                   type="text"
                   value={id}
                   onChange={(e) => setId(e.target.value)}
                   placeholder="admin 또는 본인 ID"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">비밀번호 (PW)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  보안 암호 (PW)
+                </label>
                 <input
                   type="password"
                   value={pw}
                   onChange={(e) => setPw(e.target.value)}
                   placeholder="초기 암호: 1234"
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  className="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent font-medium transition"
                 />
               </div>
 
-              {error && <p className="text-xs text-rose-600 font-medium leading-relaxed">{error}</p>}
+              {error && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl">
+                  <p className="text-xs text-rose-400 font-medium leading-relaxed flex items-center gap-1.5">
+                    <span>⚠️</span> {error}
+                  </p>
+                </div>
+              )}
 
               <button
                 type="submit"
                 disabled={isVerifying}
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2 disabled:opacity-50"
+                className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/25 transition duration-150 mt-2 disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                {isVerifying ? "계정 인증 중..." : "관제 대시보드 로그인"}
+                {isVerifying ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                    <span>인증 권한 대조 중...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>관제 대시보드 입장</span>
+                    <span className="text-blue-200">➔</span>
+                  </>
+                )}
               </button>
             </form>
 
-            <div className="mt-6 p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
-              <p>👑 <strong>총괄 관리자:</strong> ID <code className="text-blue-600 font-bold">admin</code> / PW <code>1234</code></p>
-              <p>👤 <strong>대원 계정:</strong> 본인 ID 및 비밀번호 (초기: user01~user14 / 1234)</p>
+            <div className="mt-6 pt-5 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                관리자: <strong>admin</strong>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                대원: <strong>개인 ID</strong>
+              </span>
             </div>
           </div>
         </div>
@@ -182,7 +232,7 @@
       const [cloudStatus, setCloudStatus] = useState("DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
 
-      // ★★★ [실시간 기상 데이터 상태] ★★★
+      // 실시간 기상 상태
       const [weatherData, setWeatherData] = useState({
         ilsan: { temp: "--", humidity: "--", status: "가동 적합 구간", icon: "🌤️", rawCode: 0, loading: true },
         siksa: { temp: "--", humidity: "--", status: "가동 적합 구간", icon: "☀️", rawCode: 0, loading: true },
@@ -199,7 +249,7 @@
       const [activeNoticePopup, setActiveNoticePopup] = useState(null);
 
       // 선택 대원
-      const [selectedMemberId, setSelectedMemberId] = useState(currentUser.role === 'admin' ? "user01" : currentUser.id);
+      const [selectedMemberId, setSelectedMemberId] = useState(currentUser.role === 'admin' ? (DEFAULT_MEMBERS[0]?.id || "user01") : currentUser.id);
       const [tempRoster, setTempRoster] = useState(DEFAULT_MEMBERS);
 
       // 내 계정 변경 입력창
@@ -211,20 +261,18 @@
       const [noticeContent, setNoticeContent] = useState("");
       const [noticePriority, setNoticePriority] = useState("긴급");
 
-      // 날씨 상태코드(WMO Code)를 아이콘으로 변환
       const getWeatherIcon = (code) => {
-        if (code === 0) return "☀️"; // 맑음
-        if (code === 1 || code === 2) return "🌤️"; // 구름 조금
-        if (code === 3) return "☁️"; // 흐림
-        if (code >= 45 && code <= 48) return "🌫️"; // 안개
-        if (code >= 51 && code <= 67) return "🌧️"; // 비
-        if (code >= 71 && code <= 77) return "❄️"; // 눈
-        if (code >= 80 && code <= 82) return "🌦️"; // 소나기
-        if (code >= 95) return "⛈️"; // 뇌우
+        if (code === 0) return "☀️";
+        if (code === 1 || code === 2) return "🌤️";
+        if (code === 3) return "☁️";
+        if (code >= 45 && code <= 48) return "🌫️";
+        if (code >= 51 && code <= 67) return "🌧️";
+        if (code >= 71 && code <= 77) return "❄️";
+        if (code >= 80 && code <= 82) return "🌦️";
+        if (code >= 95) return "⛈️";
         return "⛅";
       };
 
-      // 외기 냉방 판정 로직
       const evaluateFreeCooling = (temp, humidity) => {
         if (temp <= 18 && humidity <= 65) {
           return { text: "최적 고효율 구간", badge: "text-emerald-700 bg-emerald-50" };
@@ -235,10 +283,8 @@
         }
       };
 
-      // ★★★ Open-Meteo 실시간 기상 관측 데이터 호출 ★★★
       const fetchRealtimeWeather = async () => {
         try {
-          // 일산(37.658, 126.764), 식사(37.674, 126.812), 양주(37.785, 127.045)
           const lats = "37.658,37.674,37.785";
           const lons = "126.764,126.812,127.045";
           const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=Asia%2FSeoul`;
@@ -246,7 +292,6 @@
           const res = await fetch(url);
           if (res.ok) {
             const dataList = await res.json();
-            // multiple coordinates return array
             const ilsanRaw = Array.isArray(dataList) ? dataList[0].current : dataList.current;
             const siksaRaw = Array.isArray(dataList) ? dataList[1].current : dataList.current;
             const yangjuRaw = Array.isArray(dataList) ? dataList[2].current : dataList.current;
@@ -279,15 +324,14 @@
             });
           }
         } catch (e) {
-          console.warn("실시간 기상 API 연동 지연");
+          console.warn("기상 API 지연");
         }
       };
 
-      // Firebase Realtime DB 조회
       const fetchDatabase = async () => {
         setIsLoading(true);
         try {
-          fetchRealtimeWeather(); // 기상 데이터 동시 갱신
+          fetchRealtimeWeather();
 
           const resMembers = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
           if (resMembers.ok) {
@@ -332,12 +376,11 @@
 
       useEffect(() => {
         fetchDatabase();
-        // 10분마다 실시간 날씨 자동 갱신
         const weatherInterval = setInterval(fetchRealtimeWeather, 600000);
         return () => clearInterval(weatherInterval);
       }, []);
 
-      // 1년치 365일 전체 연속 스케줄링 시뮬레이션
+      // ★★★ [가변 인원 N명 대응] 1년치 365일 전체 연속 스케줄링 시뮬레이션 ★★★
       const fullYearSimulation = useMemo(() => {
         const numMembers = members.length;
         if (numMembers === 0) return { monthlyData: {}, annualTotals: {} };
@@ -366,6 +409,7 @@
             const currentDay = daysInCurrentMonth[d];
             const isWeekend = (currentDay.getDay() === 0 || currentDay.getDay() === 6);
 
+            // 야간 후 주간 연속 투입 방지
             if (d > 0 && sched[dayDutyPtr % numMembers][d - 1] === 'N') {
               dayDutyPtr++;
             }
@@ -462,6 +506,12 @@
         return fullYearSimulation.annualTotals[targetId] || { day: 0, night: 0, weekend: 0, work: 0, off: 0 };
       }, [fullYearSimulation, currentUser, selectedMemberId]);
 
+      // 가변 인원 기준 1인당 연간 목표 당직 횟수 계산
+      const targetAnnualDuty = useMemo(() => {
+        const totalDutySpots = 365 * 2; // 주간 365 + 야간 365
+        return members.length > 0 ? Math.round(totalDutySpots / members.length) : 52;
+      }, [members.length]);
+
       const fairnessAnalysis = useMemo(() => {
         const targetId = currentUser.role === 'admin' ? selectedMemberId : currentUser.id;
         const targetMember = members.find(m => m.id === targetId);
@@ -526,13 +576,11 @@
           });
 
           if (res.ok) {
-            alert("팀 전체 공유 공지가 등록되었습니다!\n모든 대원의 로그인 화면에 실시간으로 알림됩니다.");
+            alert("팀 공지가 등록되었습니다!");
             setNoticeTitle("");
             setNoticeContent("");
             setIsNoticeWriteModalOpen(false);
             fetchDatabase();
-          } else {
-            alert("공지 등록 실패: Firebase DB 권한을 확인하십시오.");
           }
         } catch (err) {
           alert("공지 전송 오류: " + err.message);
@@ -555,9 +603,35 @@
         }
       };
 
+      // ★★★ [관리자 전용: 인원 추가 및 삭제 기능] ★★★
       const handleOpenRosterModal = () => {
         setTempRoster(JSON.parse(JSON.stringify(members)));
         setIsRosterModalOpen(true);
+      };
+
+      // 신규 대원 1명 추가
+      const handleAddNewMember = () => {
+        const nextNum = tempRoster.length + 1;
+        const newId = `user${String(nextNum).padStart(2, '0')}`;
+        const newMember = {
+          id: newId,
+          name: `신규대원${nextNum}`,
+          pw: "1234"
+        };
+        setTempRoster([...tempRoster, newMember]);
+      };
+
+      // 특정 대원 1명 삭제 (최소 3명 유지)
+      const handleDeleteMember = (idx) => {
+        if (tempRoster.length <= 3) {
+          alert("무중단 3교대 연속 순환을 위해 최소 3명 이상의 교대 대원이 필요합니다.");
+          return;
+        }
+        const target = tempRoster[idx];
+        if (confirm(`[${target.name} (${target.id})] 대원을 교대 명단에서 삭제하시겠습니까?`)) {
+          const updated = tempRoster.filter((_, i) => i !== idx);
+          setTempRoster(updated);
+        }
       };
 
       const handleRosterFieldChange = (idx, field, value) => {
@@ -566,7 +640,13 @@
         setTempRoster(updated);
       };
 
+      // Firebase DB 저장
       const handleSaveRoster = async () => {
+        if (tempRoster.length < 3) {
+          alert("교대 대원은 최소 3명 이상이어야 합니다.");
+          return;
+        }
+
         setIsLoading(true);
         try {
           const res = await fetch(`${FIREBASE_DB_URL}/members.json`, {
@@ -578,7 +658,7 @@
           if (res.ok) {
             setMembers(tempRoster);
             setCloudStatus("Firebase DB 연결 정상 (실시간)");
-            alert("대원 명단 및 계정 정보가 Firebase DB에 영구 저장되었습니다!");
+            alert(`총 ${tempRoster.length}명의 교대 대원 명단이 Firebase DB에 영구 저장되었습니다!\n전체 근무표가 실시간으로 재편성됩니다.`);
             setIsRosterModalOpen(false);
           } else {
             alert("저장 실패: Firebase 콘솔 규칙을 확인하십시오.");
@@ -667,7 +747,12 @@
             <div className="flex items-center gap-3">
               <span className={`w-3 h-3 rounded-full ${isLoading ? 'bg-amber-500 animate-ping' : 'bg-emerald-500 animate-pulse'}`}></span>
               <div>
-                <h1 className="text-2xl font-black text-slate-900 tracking-tight">DC운용3팀 통합 지휘 관제 포털</h1>
+                <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                  <span>DC운용3팀 통합 지휘 관제 포털</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold font-mono">
+                    총원 {members.length}명
+                  </span>
+                </h1>
                 <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
                   <span>접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong> ({currentUser.id})</span>
                   <span className="text-[11px] px-2.5 py-0.5 rounded font-mono border bg-emerald-50 text-emerald-700 border-emerald-200 font-bold">
@@ -682,7 +767,7 @@
                 onClick={() => setIsNoticeListModalOpen(true)}
                 className="px-3.5 py-2 text-xs font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition flex items-center gap-1.5"
               >
-                📋 팀내 주요 공지 확인
+                📋 팀내 주요 공지
                 {notices.length > 0 && (
                   <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[10px] font-bold">
                     {notices.length}
@@ -717,12 +802,13 @@
                 </button>
               )}
 
+              {/* 관리자: 인원 추가/삭제 및 명단 관리 버튼 */}
               {currentUser.role === 'admin' && (
                 <button
                   onClick={handleOpenRosterModal}
                   className="px-3.5 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
                 >
-                  👥 팀원 계정/명단 관리
+                  👥 교대인원 추가/삭제/관리 ({members.length}명)
                 </button>
               )}
 
@@ -748,12 +834,12 @@
               <div className="max-w-2xl">
                 <span className="text-xs font-black text-blue-700 uppercase tracking-wider">개인 임무 및 연간 공평성 가이드</span>
                 <h3 className="text-lg font-black text-slate-900 mt-0.5">
-                  {currentUser.name} 대원님의 {month}월 당직 임무 및 연간 균형 안내
+                  {currentUser.name} 대원님의 {month}월 당직 임무 및 균형 안내
                 </h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  💡 <strong>연간 공평성 보상 원칙:</strong> 이번 달에 당직이 몰리더라도 다른 달(
+                  💡 <strong>가변 인원({members.length}명) 기준 공평성:</strong> 이번 달에 당직이 몰리더라도 다른 달(
                   <span className="text-emerald-700 font-bold">{fairnessAnalysis?.lightMonths.join(", ") || "추후 편성"}</span>
-                  )에 적게 배정되어 <strong>1년 365일 누적 시 14명 전원이 오차 1회 이내로 완벽히 동일</strong>해집니다.
+                  )에 적게 배정되어 <strong>1년 365일 누적 시 전원 목표 기준(약 {targetAnnualDuty}회)에 오차 1회 이내로 일치</strong>합니다.
                 </p>
               </div>
               <div className="flex items-center gap-3 text-center">
@@ -770,13 +856,13 @@
                 <div className="bg-white px-3.5 py-2 rounded-xl border border-blue-200 shadow-xs">
                   <span className="text-[10px] font-bold text-emerald-700">1년 총당직 합계</span>
                   <p className="text-xl font-black text-emerald-700 font-mono">{myAnnualStat.day + myAnnualStat.night}회</p>
-                  <span className="text-[9px] text-slate-500">14인 평균 52회 일치</span>
+                  <span className="text-[9px] text-slate-500">목표: 약 {targetAnnualDuty}회</span>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ★★★ 1. 상단 3개 센터 실시간 기상 및 외기 관제 (Open-Meteo API 실시간 바인딩) ★★★ */}
+          {/* 1. 상단 3개 센터 실시간 기상 관제 */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
@@ -788,7 +874,6 @@
               </span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 일산 센터 */}
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">거점 1</span>
@@ -799,9 +884,7 @@
                   <span className="text-3xl font-black text-slate-900 font-mono">
                     {weatherData.ilsan.temp !== "--" ? `${weatherData.ilsan.temp}°C` : "계측 중..."}
                   </span>
-                  <span className="text-xs font-bold text-slate-500">
-                    습도 {weatherData.ilsan.humidity}%
-                  </span>
+                  <span className="text-xs font-bold text-slate-500">습도 {weatherData.ilsan.humidity}%</span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">외기 냉방:</span>
@@ -811,7 +894,6 @@
                 </div>
               </div>
 
-              {/* 식사 센터 */}
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded border border-cyan-200">거점 2</span>
@@ -822,9 +904,7 @@
                   <span className="text-3xl font-black text-slate-900 font-mono">
                     {weatherData.siksa.temp !== "--" ? `${weatherData.siksa.temp}°C` : "계측 중..."}
                   </span>
-                  <span className="text-xs font-bold text-slate-500">
-                    습도 {weatherData.siksa.humidity}%
-                  </span>
+                  <span className="text-xs font-bold text-slate-500">습도 {weatherData.siksa.humidity}%</span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">외기 냉방:</span>
@@ -834,7 +914,6 @@
                 </div>
               </div>
 
-              {/* 양주 센터 */}
               <div className="p-5 rounded-2xl bg-white border border-slate-300 shadow-sm hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">거점 3</span>
@@ -845,9 +924,7 @@
                   <span className="text-3xl font-black text-slate-900 font-mono">
                     {weatherData.yangju.temp !== "--" ? `${weatherData.yangju.temp}°C` : "계측 중..."}
                   </span>
-                  <span className="text-xs font-bold text-slate-500">
-                    습도 {weatherData.yangju.humidity}%
-                  </span>
+                  <span className="text-xs font-bold text-slate-500">습도 {weatherData.yangju.humidity}%</span>
                 </div>
                 <div className="mt-3 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">외기 냉방:</span>
@@ -963,10 +1040,13 @@
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4 pb-4 border-b border-slate-200">
               <div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="text-blue-600">📅</span> DC운용3팀 월간 전체 종합 근무표
+                  <span>📅 DC운용3팀 월간 전체 종합 근무표</span>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-bold border border-indigo-200">
+                    가변 {members.length}인 순환 체계
+                  </span>
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  12개월 연속 순환 알고리즘 · 1인당 연간 야간 26회 완전 균등 보장
+                  인원 변동 시 실시간 자동 분배 · 연간 누적 오차 1회 이내 완전 균등 보장
                 </p>
               </div>
 
@@ -1193,7 +1273,7 @@
             </div>
           )}
 
-          {/* 팀내 주요 공지내용 확인 모달 */}
+          {/* 팀내 주요 공지 확인 모달 */}
           {isNoticeListModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-3xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
@@ -1279,7 +1359,7 @@
                       📊 12개월 연간 누적 공평성 검증 센터
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      특정 월에 당직이 많아도 다른 달에 보상 배정되어 1년 누적 시 완벽하게 일치하는지 증명합니다.
+                      총원 {members.length}명 기준 연간 균등 분배를 검증합니다.
                     </p>
                   </div>
                   {currentUser.role === 'admin' ? (
@@ -1304,18 +1384,16 @@
 
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200 mb-4 text-xs space-y-1.5">
                   <p className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                    <span>⚖️</span> {fairnessAnalysis.memberName} 대원의 1년치 공평성 종합 평가
+                    <span>⚖️</span> {fairnessAnalysis.memberName} 대원의 1년치 공평성 종합 평가 ({members.length}인 체계)
                   </p>
                   <p className="text-slate-700 leading-relaxed">
-                    • <strong>당직 집중 달:</strong> <span className="text-blue-700 font-bold">{fairnessAnalysis.heavyMonths.join(", ") || "균등 분배"}</span> 
-                    ➔ 이때 당직이 다소 많은 편입니다.
+                    • <strong>당직 집중 달:</strong> <span className="text-blue-700 font-bold">{fairnessAnalysis.heavyMonths.join(", ") || "균등 분배"}</span>
                   </p>
                   <p className="text-slate-700 leading-relaxed">
-                    • <strong>당직 여유 달(보상):</strong> <span className="text-emerald-700 font-bold">{fairnessAnalysis.lightMonths.join(", ") || "균등 분배"}</span> 
-                    ➔ 집중된 만큼 이 달들에 당직이 적게 배정되어 균형을 맞춥니다.
+                    • <strong>당직 여유 달(보상):</strong> <span className="text-emerald-700 font-bold">{fairnessAnalysis.lightMonths.join(", ") || "균등 분배"}</span>
                   </p>
                   <p className="text-indigo-800 font-black pt-1 border-t border-indigo-200/60">
-                    ✔ <strong>1년 365일 누적 결과:</strong> 총 당직 {myAnnualStat.day + myAnnualStat.night}회 (주간 {myAnnualStat.day}회, 야간 {myAnnualStat.night}회, 주말당직 {myAnnualStat.weekend}회)로 <strong>14인 전원 오차 0~1회 이내 완전 균등</strong> 달성!
+                    ✔ <strong>1년 365일 누적 결과:</strong> 총 당직 {myAnnualStat.day + myAnnualStat.night}회 (주간 {myAnnualStat.day}회, 야간 {myAnnualStat.night}회, 주말당직 {myAnnualStat.weekend}회)로 <strong>{members.length}인 전원 오차 0~1회 이내 완전 균등</strong> 달성!
                   </p>
                 </div>
 
@@ -1433,30 +1511,40 @@
             </div>
           )}
 
-          {/* 관리자 전용 팀원 계정/명단 관리 모달 */}
+          {/* ★★★ [관리자 전용: 대원 추가/삭제/편집 모달] ★★★ */}
           {isRosterModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-3xl p-6 w-full max-w-3xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-4xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
                   <div>
                     <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                      👥 교대근무 팀원 계정/명단 관리 (Firebase Realtime DB)
+                      👥 교대근무 대원 관리 (가변 인원 편성)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      각 대원의 ID, 실제 성함, 비밀번호를 관리합니다.
+                      인원이 늘어나거나 줄어들어도 유연하게 추가/삭제할 수 있으며, 근무표에 실시간 자동 반영됩니다.
                     </p>
                   </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
-                    정원 {tempRoster.length}명
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
+                      현재 인원: {tempRoster.length}명
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAddNewMember}
+                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-sm transition flex items-center gap-1"
+                    >
+                      + 대원 추가
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-y-auto flex-1 pr-1 space-y-2">
                   <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 px-3 py-1 bg-slate-50 rounded-lg">
                     <span className="col-span-1">순번</span>
                     <span className="col-span-3">로그인 ID</span>
-                    <span className="col-span-4">실제 성함 (이름 매핑)</span>
-                    <span className="col-span-4">비밀번호 (PW)</span>
+                    <span className="col-span-4">성함 (이름 매핑)</span>
+                    <span className="col-span-3">비밀번호 (PW)</span>
+                    <span className="col-span-1 text-center">관리</span>
                   </div>
 
                   {tempRoster.map((item, idx) => (
@@ -1482,7 +1570,7 @@
                           className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
-                      <div className="col-span-4">
+                      <div className="col-span-3">
                         <input
                           type="text"
                           value={item.pw || "1234"}
@@ -1491,13 +1579,23 @@
                           className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
+                      <div className="col-span-1 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteMember(idx)}
+                          className="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg transition text-xs font-bold"
+                          title="대원 삭제"
+                        >
+                          삭제
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-3">
                   <span className="text-[11px] text-slate-500">
-                    * [Firebase DB에 영구 저장] 클릭 시 전 기기에 실시간 반영됩니다.
+                    * 인원 변경 후 [Firebase DB에 영구 저장]을 누르면 즉시 전체 근무표가 재계산되어 동기화됩니다.
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -1510,7 +1608,7 @@
                       onClick={handleSaveRoster}
                       className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl shadow-md shadow-blue-500/20 transition"
                     >
-                      Firebase DB에 영구 저장
+                      Firebase DB에 영구 저장 ({tempRoster.length}명 확정)
                     </button>
                   </div>
                 </div>
