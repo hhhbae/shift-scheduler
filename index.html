@@ -31,9 +31,12 @@
 
     // 사령관님의 Firebase Realtime Database
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v12";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v15";
     const ANCHOR_POPUP_DISMISS_KEY = "dc3_anchor_dismiss_date";
     const PERMANENT_DISMISSED_NOTICES_KEY = "dc3_notices_permanently_dismissed";
+
+    // 사령관님께서 추출하신 고화질 실사 아나운서 영상 직결 주소
+    const ANCHOR_VIDEO_URL = "https://github.com/user-attachments/assets/36e4bdfe-0294-4d73-9785-f518fc131820";
 
     const DEFAULT_MEMBERS = [
       { id: "user01", name: "대원01", pw: "1234" },
@@ -51,23 +54,6 @@
       { id: "user13", name: "대원13", pw: "1234" },
       { id: "user14", name: "대원14", pw: "1234" }
     ];
-
-    // 한국어 여성 음성 합성 브리핑 함수
-    const speakAnchorMessage = (text) => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'ko-KR';
-        utterance.rate = 0.95;
-        utterance.pitch = 1.15; // 여성 아나운서 톤
-        
-        const voices = window.speechSynthesis.getVoices();
-        const koFemaleVoice = voices.find(v => v.lang.includes('ko') && (v.name.includes('Female') || v.name.includes('Yuna') || v.name.includes('Google 한국어') || v.name.includes('Heami') || v.name.includes('SunHi')));
-        if (koFemaleVoice) utterance.voice = koFemaleVoice;
-
-        window.speechSynthesis.speak(utterance);
-      }
-    };
 
     // 1. 프리미엄 사이버 관제 스타일 로그인 화면
     function LoginScreen({ onLoginSuccess }) {
@@ -247,7 +233,7 @@
       const [cloudStatus, setCloudStatus] = useState("DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
 
-      // ★★★ [신규 1: 여성 아나운서 동영상 응원 팝업 제어] ★★★
+      // 실사 아나운서 영상 팝업 상태
       const [showAnchorGreeting, setShowAnchorGreeting] = useState(false);
 
       // 실시간 기상 상태
@@ -266,15 +252,12 @@
       const [isNoticeWriteModalOpen, setIsNoticeWriteModalOpen] = useState(false);
       const [activeNoticePopup, setActiveNoticePopup] = useState(null);
 
-      // 선택 대원
       const [selectedMemberId, setSelectedMemberId] = useState(currentUser.role === 'admin' ? (DEFAULT_MEMBERS[0]?.id || "user01") : currentUser.id);
       const [tempRoster, setTempRoster] = useState(DEFAULT_MEMBERS);
 
-      // 내 계정 변경 입력창
       const [newMyId, setNewMyId] = useState(currentUser.id);
       const [newMyPw, setNewMyPw] = useState("");
 
-      // 새 공지 작성 폼
       const [noticeTitle, setNoticeTitle] = useState("");
       const [noticeContent, setNoticeContent] = useState("");
       const [noticePriority, setNoticePriority] = useState("긴급");
@@ -376,8 +359,6 @@
               
               setNotices(list);
 
-              // ★★★ [공지 팝업 영구 차단 검사 로직] ★★★
-              // localStorage에 저장된 영구 차단 공지 key 목록 조회
               let permanentlyDismissed = [];
               try {
                 permanentlyDismissed = JSON.parse(localStorage.getItem(PERMANENT_DISMISSED_NOTICES_KEY) || "[]");
@@ -385,7 +366,6 @@
 
               if (list.length > 0) {
                 const latestNotice = list[0];
-                // 영구 차단 목록에 포함되지 않은 경우에만 팝업 표시
                 if (!permanentlyDismissed.includes(latestNotice.key)) {
                   setActiveNoticePopup(latestNotice);
                 }
@@ -401,18 +381,13 @@
         }
       };
 
-      // 로그인 시 아나운서 영상 팝업 실행
+      // 로그인 직후 아나운서 영상 팝업 실행
       useEffect(() => {
         const todayStr = new Date().toDateString();
         const dismissedDate = localStorage.getItem(ANCHOR_POPUP_DISMISS_KEY);
         
-        // 로그인 직후이거나 오늘 하루 닫기를 누르지 않은 경우 실행
         if (justLoggedIn && dismissedDate !== todayStr) {
           setShowAnchorGreeting(true);
-          // 아나운서 음성 합성 발화
-          setTimeout(() => {
-            speakAnchorMessage(`DC운용 3팀 여러분! 오늘도 안전하고 힘찬 하루 보내세요! 파이팅!`);
-          }, 600);
         }
 
         fetchDatabase();
@@ -1181,50 +1156,44 @@
             </div>
           </section>
 
-          {/* ★★★ [신규 1] 여성 아나운서 로그인 응원 동영상 & 음성 팝업 ★★★ */}
+          {/* ★★★ [사령관님의 실사 아나운서 고화질 비디오 팝업] ★★★ */}
           {showAnchorGreeting && (
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
               <div className="bg-slate-900 rounded-3xl overflow-hidden w-full max-w-md border border-slate-700 shadow-2xl relative">
-                {/* 상단 비디오 영역 (뉴스룸 아나운서 스톡 비디오) */}
-                <div className="relative aspect-video w-full bg-slate-950 overflow-hidden">
+                {/* 실사 아나운서 영상 영역 (소리 포함 재생) */}
+                <div className="relative aspect-video w-full bg-slate-950 overflow-hidden flex items-center justify-center">
                   <video
                     autoPlay
-                    loop
-                    muted
                     playsInline
+                    controls
                     className="w-full h-full object-cover"
-                    src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+                    src={ANCHOR_VIDEO_URL}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent"></div>
-                  <div className="absolute top-3 left-3 flex items-center gap-2 px-2.5 py-1 bg-red-600/90 text-white rounded-full text-[10px] font-black tracking-widest uppercase">
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-black tracking-widest uppercase shadow pointer-events-none">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                    LIVE ANCHOR
+                    HQ LIVE
                   </div>
                 </div>
 
-                {/* 하단 메시지 및 브리핑 영역 */}
+                {/* 하단 메시지 브리핑 */}
                 <div className="p-6 text-center">
                   <span className="text-xs font-bold text-blue-400 font-mono tracking-wider">DC OPS 3 COMMAND GREETING</span>
-                  <h3 className="text-lg font-black text-white mt-1 leading-snug">
+                  <h3 className="text-lg font-black text-white mt-1.5 leading-snug">
                     "DC운용3팀 여러분!<br />오늘도 안전하고 힘찬 하루 보내세요!"
                   </h3>
                   <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                    3대 데이터센터 무중단 관제를 위해 헌신하시는 대원 여러분을 언제나 응원합니다.
+                    일산 · 식사 · 양주 3대 센터 무중단 방어를 위해 헌신하시는 대원 여러분을 응원합니다!
                   </p>
 
                   <div className="mt-6 flex flex-col gap-2">
                     <button
-                      onClick={() => {
-                        window.speechSynthesis?.cancel();
-                        setShowAnchorGreeting(false);
-                      }}
+                      onClick={() => setShowAnchorGreeting(false)}
                       className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg transition"
                     >
                       응원 접수 완료! 활기차게 임무 시작
                     </button>
                     <button
                       onClick={() => {
-                        window.speechSynthesis?.cancel();
                         localStorage.setItem(ANCHOR_POPUP_DISMISS_KEY, new Date().toDateString());
                         setShowAnchorGreeting(false);
                       }}
@@ -1238,7 +1207,7 @@
             </div>
           )}
 
-          {/* ★★★ [신규 2: 영구 차단 기능 탑재된 공지사항 팝업 모달] ★★★ */}
+          {/* 영구 차단 기능 탑재된 공지사항 팝업 모달 */}
           {activeNoticePopup && (
             <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
               <div className="bg-white rounded-3xl p-6 w-full max-w-lg border-2 border-rose-500 shadow-2xl relative">
@@ -1278,7 +1247,6 @@
                     onClick={() => {
                       const chk = document.getElementById("permanentDismissCheckbox");
                       if (chk && chk.checked) {
-                        // 영구 차단 목록에 해당 공지 key 추가 저장
                         let currentList = [];
                         try {
                           currentList = JSON.parse(localStorage.getItem(PERMANENT_DISMISSED_NOTICES_KEY) || "[]");
@@ -1732,7 +1700,6 @@
       };
 
       const handleLogout = () => {
-        window.speechSynthesis?.cancel();
         localStorage.removeItem(AUTH_SESSION_KEY);
         setCurrentUser(null);
         setJustLoggedIn(false);
