@@ -24,46 +24,100 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // 사령관님의 Firebase Realtime Database 직결 URL
+    // 사령관님의 Firebase Realtime Database
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_rtdb";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v9";
+    const NOTICE_POPUP_DISMISS_KEY = "dc3_notice_dismiss_date";
 
     const DEFAULT_MEMBERS = [
-      { id: "user01", name: "대원01" }, { id: "user02", name: "대원02" },
-      { id: "user03", name: "대원03" }, { id: "user04", name: "대원04" },
-      { id: "user05", name: "대원05" }, { id: "user06", name: "대원06" },
-      { id: "user07", name: "대원07" }, { id: "user08", name: "대원08" },
-      { id: "user09", name: "대원09" }, { id: "user10", name: "대원10" },
-      { id: "user11", name: "대원11" }, { id: "user12", name: "대원12" },
-      { id: "user13", name: "대원13" }, { id: "user14", name: "대원14" }
+      { id: "user01", name: "대원01", pw: "1234" },
+      { id: "user02", name: "대원02", pw: "1234" },
+      { id: "user03", name: "대원03", pw: "1234" },
+      { id: "user04", name: "대원04", pw: "1234" },
+      { id: "user05", name: "대원05", pw: "1234" },
+      { id: "user06", name: "대원06", pw: "1234" },
+      { id: "user07", name: "대원07", pw: "1234" },
+      { id: "user08", name: "대원08", pw: "1234" },
+      { id: "user09", name: "대원09", pw: "1234" },
+      { id: "user10", name: "대원10", pw: "1234" },
+      { id: "user11", name: "대원11", pw: "1234" },
+      { id: "user12", name: "대원12", pw: "1234" },
+      { id: "user13", name: "대원13", pw: "1234" },
+      { id: "user14", name: "대원14", pw: "1234" }
     ];
 
-    // 1. 로그인 게이트웨이
+    // 1. 실시간 DB 연동 로그인 화면
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
       const [error, setError] = useState("");
+      const [isVerifying, setIsVerifying] = useState(false);
 
-      const handleLogin = (e) => {
+      const handleLogin = async (e) => {
         e.preventDefault();
         const trimmedId = id.trim();
         const trimmedPw = pw.trim();
 
-        if (trimmedId === "admin" && (trimmedPw === "1234" || trimmedPw === "")) {
-          const adminUser = { id: "admin", name: "총괄 관리자", role: "admin" };
-          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(adminUser));
-          onLoginSuccess(adminUser);
+        if (!trimmedId) {
+          setError("아이디를 입력하십시오.");
           return;
         }
 
-        if (trimmedId.startsWith("user") && (trimmedPw === "1234" || trimmedPw === "")) {
-          const memberUser = { id: trimmedId, name: trimmedId, role: "member" };
+        setIsVerifying(true);
+        setError("");
+
+        try {
+          // 관리자 로그인 (admin / 1234)
+          if (trimmedId === "admin" && (trimmedPw === "1234" || trimmedPw === "")) {
+            const adminUser = { id: "admin", name: "총괄 관리자", role: "admin" };
+            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(adminUser));
+            onLoginSuccess(adminUser);
+            return;
+          }
+
+          // Firebase DB에서 대원 명단 실시간 조회
+          let currentMembers = DEFAULT_MEMBERS;
+          try {
+            const res = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
+            if (res.ok) {
+              const data = await res.json();
+              if (Array.isArray(data) && data.length > 0) {
+                currentMembers = data;
+              }
+            }
+          } catch (netErr) {
+            console.warn("Firebase offline");
+          }
+
+          const matched = currentMembers.find(m => m.id === trimmedId);
+
+          if (!matched) {
+            setError(`등록되지 않은 아이디입니다: [${trimmedId}]`);
+            setIsVerifying(false);
+            return;
+          }
+
+          const validPw = matched.pw || "1234";
+          if (trimmedPw !== validPw && trimmedPw !== "") {
+            setError("비밀번호가 일치하지 않습니다.");
+            setIsVerifying(false);
+            return;
+          }
+
+          // 성공: 실제 매핑된 성함으로 로그인
+          const memberUser = {
+            id: matched.id,
+            name: matched.name,
+            role: "member"
+          };
+
           localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(memberUser));
           onLoginSuccess(memberUser);
-          return;
+        } catch (err) {
+          setError("로그인 처리 중 오류 발생: " + err.message);
+        } finally {
+          setIsVerifying(false);
         }
-
-        setError("로그인 정보를 확인하십시오. (관리자: admin / 대원: user01~user14 / 초기PW: 1234)");
       };
 
       return (
@@ -74,7 +128,7 @@
                 INTEGRATED OPS COMMAND
               </span>
               <h1 className="text-2xl font-black tracking-tight text-slate-900">DC운용3팀 관제 포털</h1>
-              <p className="text-xs text-slate-500 mt-1">12개월 연간 누적 공평 교대근무 시스템</p>
+              <p className="text-xs text-slate-500 mt-1">Firebase DB 실시간 동기화 & 팀 공지망</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-4">
@@ -84,7 +138,7 @@
                   type="text"
                   value={id}
                   onChange={(e) => setId(e.target.value)}
-                  placeholder="admin 또는 user01 ~ user14"
+                  placeholder="admin 또는 본인 ID"
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
@@ -100,19 +154,20 @@
                 />
               </div>
 
-              {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
+              {error && <p className="text-xs text-rose-600 font-medium leading-relaxed">{error}</p>}
 
               <button
                 type="submit"
-                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2"
+                disabled={isVerifying}
+                className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-sm rounded-xl shadow-lg shadow-blue-500/20 transition duration-150 mt-2 disabled:opacity-50"
               >
-                관제 대시보드 로그인
+                {isVerifying ? "계정 인증 및 명단 대조 중..." : "관제 대시보드 로그인"}
               </button>
             </form>
 
             <div className="mt-6 p-3 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-500 space-y-1">
-              <p>👑 <strong>관리자:</strong> ID <code className="text-blue-600 font-bold">admin</code> / PW <code>1234</code></p>
-              <p>👤 <strong>팀원:</strong> ID <code className="text-indigo-600 font-bold">user01</code> ~ <code className="text-indigo-600 font-bold">user14</code> / PW <code>1234</code></p>
+              <p>👑 <strong>총괄 관리자:</strong> ID <code className="text-blue-600 font-bold">admin</code> / PW <code>1234</code></p>
+              <p>👤 <strong>대원 계정:</strong> 본인 ID 및 비밀번호 (초기: user01~user14 / 1234)</p>
             </div>
           </div>
         </div>
@@ -120,35 +175,80 @@
     }
 
     // 2. 통합 관제 대시보드
-    function MainDashboard({ currentUser, onLogout }) {
+    function MainDashboard({ currentUser, onLogout, onUpdateCurrentUserName }) {
       const today = new Date();
       const [year, setYear] = useState(today.getFullYear());
       const [month, setMonth] = useState(today.getMonth() + 1);
 
       const [members, setMembers] = useState(DEFAULT_MEMBERS);
-      const [cloudStatus, setCloudStatus] = useState("Firebase DB 연결 확인 중...");
+      const [notices, setNotices] = useState([]);
+      const [cloudStatus, setCloudStatus] = useState("Firebase DB 동기화 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
+
+      // 모달 제어 상태
       const [isRosterModalOpen, setIsRosterModalOpen] = useState(false);
       const [isFairnessModalOpen, setIsFairnessModalOpen] = useState(false);
+      const [isMyAccountModalOpen, setIsMyAccountModalOpen] = useState(false);
+      const [isNoticeListModalOpen, setIsNoticeListModalOpen] = useState(false);
+      const [isNoticeWriteModalOpen, setIsNoticeWriteModalOpen] = useState(false);
+      const [activeNoticePopup, setActiveNoticePopup] = useState(null); // 로그인 시 팝업으로 띄울 최신 공지
+
+      // 선택 대원
       const [selectedMemberId, setSelectedMemberId] = useState(currentUser.role === 'admin' ? "user01" : currentUser.id);
       const [tempRoster, setTempRoster] = useState(DEFAULT_MEMBERS);
 
-      // Firebase Realtime DB에서 팀원 명단 실시간 조회
+      // 내 계정 변경 입력창
+      const [newMyId, setNewMyId] = useState(currentUser.id);
+      const [newMyPw, setNewMyPw] = useState("");
+
+      // 새 공지 작성 폼
+      const [noticeTitle, setNoticeTitle] = useState("");
+      const [noticeContent, setNoticeContent] = useState("");
+      const [noticePriority, setNoticePriority] = useState("긴급");
+
+      // Firebase Realtime DB에서 팀원 명단 및 공지사항 실시간 조회
       const fetchDatabase = async () => {
         setIsLoading(true);
         try {
-          const res = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
-          if (res.ok) {
-            const data = await res.json();
+          // 1) 대원 명단
+          const resMembers = await fetch(`${FIREBASE_DB_URL}/members.json`, { cache: "no-cache" });
+          if (resMembers.ok) {
+            const data = await resMembers.json();
             if (Array.isArray(data) && data.length > 0) {
               setMembers(data);
-              setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
-            } else {
-              setCloudStatus("DB 연결됨 (초기 명단 등록 대기)");
+              if (currentUser.role === 'member') {
+                const me = data.find(m => m.id === currentUser.id);
+                if (me && me.name !== currentUser.name) {
+                  onUpdateCurrentUserName(me.name);
+                }
+              }
             }
-          } else {
-            setCloudStatus("DB 접근 오류: 규칙(Rules) 탭 확인 필요");
           }
+
+          // 2) 팀 공지사항 조회
+          const resNotices = await fetch(`${FIREBASE_DB_URL}/notices.json`, { cache: "no-cache" });
+          if (resNotices.ok) {
+            const noticeData = await resNotices.json();
+            if (noticeData) {
+              // Firebase 객체 -> 배열 변환 및 최신순 정렬
+              const list = Object.keys(noticeData).map(key => ({
+                key,
+                ...noticeData[key]
+              })).sort((a, b) => b.timestamp - a.timestamp);
+              
+              setNotices(list);
+
+              // 로그인 직후 가장 최신의 중요 공지가 있다면 팝업 표시 검토
+              const todayStr = new Date().toDateString();
+              const dismissed = localStorage.getItem(NOTICE_POPUP_DISMISS_KEY);
+              if (list.length > 0 && dismissed !== todayStr) {
+                // 가장 최신 공지 1건 팝업
+                setActiveNoticePopup(list[0]);
+              }
+            }
+          }
+
+          setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
         } catch (e) {
           setCloudStatus("DB 통신 실패: 네트워크 상태 확인");
         } finally {
@@ -160,7 +260,7 @@
         fetchDatabase();
       }, []);
 
-      // 1년치 365일 전체 연속 스케줄링 시뮬레이션 (연간 누적 공평성 핵심 엔진)
+      // 1년치 365일 전체 연속 스케줄링 시뮬레이션
       const fullYearSimulation = useMemo(() => {
         const numMembers = members.length;
         if (numMembers === 0) return { monthlyData: {}, annualTotals: {} };
@@ -189,7 +289,6 @@
             const currentDay = daysInCurrentMonth[d];
             const isWeekend = (currentDay.getDay() === 0 || currentDay.getDay() === 6);
 
-            // 야간 후 연속 주간 방지
             if (d > 0 && sched[dayDutyPtr % numMembers][d - 1] === 'N') {
               dayDutyPtr++;
             }
@@ -215,7 +314,6 @@
             }
           }
 
-          // 해당 월 통계 계산
           const stats = members.map((mem, idx) => {
             let dayCount = 0, nightCount = 0, weekendDuty = 0, regularWork = 0, offCount = 0;
             sched[idx].forEach((duty, dIdx) => {
@@ -226,7 +324,6 @@
               else if (duty === 'O' || duty === 'B') { offCount++; }
             });
 
-            // 연간 누적 합산
             annualTotals[mem.id].day += dayCount;
             annualTotals[mem.id].night += nightCount;
             annualTotals[mem.id].weekend += weekendDuty;
@@ -254,7 +351,6 @@
         return { monthlyData, annualTotals };
       }, [members, year]);
 
-      // 현재 선택된 월의 스케줄 데이터
       const currentMonthData = fullYearSimulation.monthlyData[month] || { days: [], schedule: [], summary: [] };
       const daysInMonth = currentMonthData.days;
       const schedule = currentMonthData.schedule;
@@ -279,19 +375,18 @@
         return { dayWorker, nightWorker, restWorkers, workWorkers, todayDate };
       }, [schedule, members, daysInMonth]);
 
-      // 로그인 대원 개인 맞춤 알림
+      // 로그인 본인의 당월 통계
       const myStat = useMemo(() => {
         if (currentUser.role === 'admin') return null;
         return summary.find(s => s.id === currentUser.id);
       }, [summary, currentUser]);
 
-      // 로그인 대원의 연간 누적 통계
       const myAnnualStat = useMemo(() => {
         const targetId = currentUser.role === 'admin' ? selectedMemberId : currentUser.id;
         return fullYearSimulation.annualTotals[targetId] || { day: 0, night: 0, weekend: 0, work: 0, off: 0 };
       }, [fullYearSimulation, currentUser, selectedMemberId]);
 
-      // 연간 공평성 분석 브리핑 생성기 (해당 대원의 12개월 부하 분산 분석)
+      // 공평성 분석 브리핑
       const fairnessAnalysis = useMemo(() => {
         const targetId = currentUser.role === 'admin' ? selectedMemberId : currentUser.id;
         const targetMember = members.find(m => m.id === targetId);
@@ -313,7 +408,6 @@
               totalDuty
             });
 
-            // 야간+주간 4회 이상이거나 주말 3회 이상이면 집중 월, 3회 이하이면 여유 월
             if (totalDuty >= 4 || mSummary.weekendDuty >= 3) {
               heavyMonths.push(`${m}월(${totalDuty}회)`);
             } else if (totalDuty <= 2 || mSummary.weekendDuty <= 1) {
@@ -322,30 +416,85 @@
           }
         }
 
-        const currentMonthRecord = monthsBreakdown.find(b => b.month === month);
-
         return {
           memberName: targetMember.name,
           memberId: targetId,
           breakdown: monthsBreakdown,
           heavyMonths,
-          lightMonths,
-          currentMonthRecord
+          lightMonths
         };
-      }, [fullYearSimulation, members, currentUser, selectedMemberId, month]);
+      }, [fullYearSimulation, members, currentUser, selectedMemberId]);
 
+      // 공지사항 등록 핸들러 (누구나 작성 가능)
+      const handleCreateNotice = async (e) => {
+        e.preventDefault();
+        if (!noticeTitle.trim() || !noticeContent.trim()) {
+          alert("공지 제목과 내용을 모두 입력하십시오.");
+          return;
+        }
+
+        setIsLoading(true);
+        try {
+          const newNotice = {
+            title: noticeTitle.trim(),
+            content: noticeContent.trim(),
+            priority: noticePriority,
+            authorName: currentUser.name,
+            authorId: currentUser.id,
+            dateStr: new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }),
+            timestamp: Date.now()
+          };
+
+          // Firebase Realtime DB POST 저장
+          const res = await fetch(`${FIREBASE_DB_URL}/notices.json`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newNotice)
+          });
+
+          if (res.ok) {
+            alert("팀 전체 공유 공지가 등록되었습니다!\n모든 대원의 로그인 화면에 실시간으로 알림됩니다.");
+            setNoticeTitle("");
+            setNoticeContent("");
+            setIsNoticeWriteModalOpen(false);
+            fetchDatabase(); // 목록 즉시 재조회
+          } else {
+            alert("공지 등록 실패: Firebase DB 권한을 확인하십시오.");
+          }
+        } catch (err) {
+          alert("공지 전송 오류: " + err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // 공지 삭제 (작성자 또는 관리자 전용)
+      const handleDeleteNotice = async (noticeKey) => {
+        if (!confirm("해당 공지를 삭제하시겠습니까?")) return;
+        setIsLoading(true);
+        try {
+          await fetch(`${FIREBASE_DB_URL}/notices/${noticeKey}.json`, { method: "DELETE" });
+          alert("공지가 삭제되었습니다.");
+          fetchDatabase();
+        } catch (err) {
+          alert("삭제 오류: " + err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // 관리자: 팀원 명단/계정 일괄 관리 모달 열기
       const handleOpenRosterModal = () => {
         setTempRoster(JSON.parse(JSON.stringify(members)));
         setIsRosterModalOpen(true);
       };
 
-      const handleNameChange = (idx, newName) => {
+      const handleRosterFieldChange = (idx, field, value) => {
         const updated = [...tempRoster];
-        updated[idx].name = newName;
+        updated[idx][field] = value;
         setTempRoster(updated);
       };
 
-      // Firebase Realtime DB에 PUT 방식으로 일괄 영구 저장
       const handleSaveRoster = async () => {
         setIsLoading(true);
         try {
@@ -358,13 +507,60 @@
           if (res.ok) {
             setMembers(tempRoster);
             setCloudStatus("Firebase DB 연결 정상 (실시간 동기화)");
-            alert("Firebase 클라우드 DB에 영구 저장되었습니다!\n다른 어떤 브라우저나 스마트폰으로 접속해도 이 이름이 100% 동일하게 나타납니다.");
+            alert("대원 명단 및 계정 정보가 Firebase DB에 영구 저장되었습니다!");
             setIsRosterModalOpen(false);
           } else {
-            alert("저장 실패: Firebase Console의 Realtime Database -> [규칙(Rules)] 탭에서 read/write가 true인지 확인하십시오.");
+            alert("저장 실패: Firebase 콘솔 규칙을 확인하십시오.");
           }
         } catch (err) {
-          alert("저장 통신 오류: " + err.message);
+          alert("통신 오류: " + err.message);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      // 대원 본인 ID/PW 변경
+      const handleSaveMyAccount = async () => {
+        if (!newMyId.trim()) {
+          alert("아이디를 입력해 주십시오.");
+          return;
+        }
+
+        const isDuplicate = members.some(m => m.id === newMyId.trim() && m.id !== currentUser.id);
+        if (isDuplicate) {
+          alert("이미 다른 대원이 사용 중인 아이디입니다.");
+          return;
+        }
+
+        setIsLoading(true);
+        try {
+          const updatedMembers = members.map(m => {
+            if (m.id === currentUser.id) {
+              return {
+                ...m,
+                id: newMyId.trim(),
+                pw: newMyPw.trim() ? newMyPw.trim() : (m.pw || "1234")
+              };
+            }
+            return m;
+          });
+
+          const res = await fetch(`${FIREBASE_DB_URL}/members.json`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedMembers)
+          });
+
+          if (res.ok) {
+            setMembers(updatedMembers);
+            const updatedSession = { ...currentUser, id: newMyId.trim() };
+            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updatedSession));
+            alert("내 계정 정보가 성공적으로 변경되었습니다.");
+            setIsMyAccountModalOpen(false);
+            setNewMyPw("");
+          }
+        } catch (err) {
+          alert("오류 발생: " + err.message);
         } finally {
           setIsLoading(false);
         }
@@ -403,7 +599,7 @@
               <div>
                 <h1 className="text-2xl font-black text-slate-900 tracking-tight">DC운용3팀 통합 지휘 관제 포털</h1>
                 <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-2">
-                  <span>접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong></span>
+                  <span>접속자: <strong className="text-blue-600 font-black">{currentUser.name}</strong> ({currentUser.id})</span>
                   <span className="text-[11px] px-2.5 py-0.5 rounded font-mono border bg-emerald-50 text-emerald-700 border-emerald-200 font-bold">
                     {cloudStatus}
                   </span>
@@ -411,43 +607,74 @@
               </div>
             </div>
 
-            <div className="flex items-center flex-wrap gap-2.5">
+            <div className="flex items-center flex-wrap gap-2">
+              {/* 팀 공지 확인 메뉴 버튼 */}
+              <button
+                onClick={() => setIsNoticeListModalOpen(true)}
+                className="px-3.5 py-2 text-xs font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition flex items-center gap-1.5"
+              >
+                📋 팀내 주요 공지 확인
+                {notices.length > 0 && (
+                  <span className="px-1.5 py-0.2 bg-rose-500 text-white rounded-full text-[10px] font-bold">
+                    {notices.length}
+                  </span>
+                )}
+              </button>
+
+              {/* 공지 등록 버튼 */}
+              <button
+                onClick={() => setIsNoticeWriteModalOpen(true)}
+                className="px-3.5 py-2 text-xs font-black bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-md shadow-rose-500/20 transition flex items-center gap-1.5"
+              >
+                📢 팀 공지 등록
+              </button>
+
               <button
                 onClick={() => setIsFairnessModalOpen(true)}
-                className="px-4 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5"
+                className="px-3.5 py-2 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md shadow-emerald-500/20 transition flex items-center gap-1.5"
               >
-                📊 1년치 공평성 검증 및 월별 분석
+                📊 1년치 공평성 검증
               </button>
+
+              {currentUser.role === 'member' && (
+                <button
+                  onClick={() => {
+                    setNewMyId(currentUser.id);
+                    setNewMyPw("");
+                    setIsMyAccountModalOpen(true);
+                  }}
+                  className="px-3.5 py-2 text-xs font-black bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl shadow-md shadow-amber-500/20 transition flex items-center gap-1.5"
+                >
+                  🔑 내 계정 설정
+                </button>
+              )}
 
               {currentUser.role === 'admin' && (
                 <button
                   onClick={handleOpenRosterModal}
-                  className="px-4 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
+                  className="px-3.5 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                  👥 교대근무 팀원 이름 관리
+                  👥 팀원 계정/명단 관리
                 </button>
               )}
 
               <button
                 onClick={fetchDatabase}
-                className="px-3.5 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl transition flex items-center gap-1.5"
+                className="px-3 py-2 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl transition"
               >
-                🔄 DB 새로고침
+                🔄 새로고침
               </button>
 
               <button
                 onClick={onLogout}
-                className="px-3.5 py-2 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition"
+                className="px-3 py-2 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl transition"
               >
                 로그아웃
               </button>
             </div>
           </div>
 
-          {/* 대원 개인 알림 카드 & 1년치 균등 배분 보상 안내 카드 */}
+          {/* 대원 개인 맞춤 알림 카드 */}
           {myStat && (
             <div className="mb-6 p-5 rounded-2xl bg-blue-50 border border-blue-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
               <div className="max-w-2xl">
@@ -456,9 +683,9 @@
                   {currentUser.name} 대원님의 {month}월 당직 임무 및 연간 균형 안내
                 </h3>
                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                  💡 <strong>연간 공평성 원칙:</strong> 이번 달 당직이 다소 많더라도, 다른 달(
+                  💡 <strong>연간 공평성 보상 원칙:</strong> 이번 달에 당직이 몰리더라도 다른 달(
                   <span className="text-emerald-700 font-bold">{fairnessAnalysis?.lightMonths.join(", ") || "추후 편성"}</span>
-                  )에 당직이 적게 배정되어 <strong>1년 전체 누적 시 14명 전원이 오차 1회 이내로 완벽히 동일</strong>해집니다.
+                  )에 적게 배정되어 <strong>1년 365일 누적 시 14명 전원이 오차 1회 이내로 완벽히 동일</strong>해집니다.
                 </p>
               </div>
               <div className="flex items-center gap-3 text-center">
@@ -473,7 +700,7 @@
                   <span className="text-[9px] text-slate-400">토/일 배정</span>
                 </div>
                 <div className="bg-white px-3.5 py-2 rounded-xl border border-blue-200 shadow-xs">
-                  <span className="text-[10px] font-bold text-emerald-700">1년 연간 총당직</span>
+                  <span className="text-[10px] font-bold text-emerald-700">1년 총당직 합계</span>
                   <p className="text-xl font-black text-emerald-700 font-mono">{myAnnualStat.day + myAnnualStat.night}회</p>
                   <span className="text-[9px] text-slate-500">14인 평균 52회 일치</span>
                 </div>
@@ -481,7 +708,7 @@
             </div>
           )}
 
-          {/* 1. 상단 3개 센터 기상 및 외기 관제 */}
+          {/* 1. 상단 3개 센터 기상 정보 */}
           <section className="mb-6">
             <div className="flex items-center justify-between mb-2.5">
               <h2 className="text-sm font-extrabold text-slate-700 flex items-center gap-2">
@@ -752,7 +979,205 @@
             </div>
           </section>
 
-          {/* 모달 1: 1년치 공평성 검증 및 월별 부하/보상 분석 창 */}
+          {/* ★★★ [신규 모달 1] 로그인 직후 자동 공지 팝업 브리핑 ★★★ */}
+          {activeNoticePopup && (
+            <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-lg border-2 border-rose-500 shadow-2xl relative">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 bg-rose-600 text-white rounded font-black text-[11px]">
+                      {activeNoticePopup.priority || "공지"}
+                    </span>
+                    <h3 className="text-base font-black text-slate-900">
+                      🚨 팀 중요 공지사항 알림
+                    </h3>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">{activeNoticePopup.dateStr}</span>
+                </div>
+
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 mb-4">
+                  <h4 className="text-sm font-extrabold text-slate-900 mb-2">{activeNoticePopup.title}</h4>
+                  <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {activeNoticePopup.content}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-slate-500 mb-4">
+                  <span>작성자: <strong>{activeNoticePopup.authorName}</strong></span>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-600">
+                    <input
+                      type="checkbox"
+                      id="dismissToday"
+                      className="rounded text-blue-600 focus:ring-0"
+                    />
+                    오늘 하루 이 팝업 열지 않기
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => {
+                      const chk = document.getElementById("dismissToday");
+                      if (chk && chk.checked) {
+                        localStorage.setItem(NOTICE_POPUP_DISMISS_KEY, new Date().toDateString());
+                      }
+                      setActiveNoticePopup(null);
+                    }}
+                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-black text-xs rounded-xl shadow transition"
+                  >
+                    공지 확인 완료 및 닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ★★★ [신규 모달 2] 팀 공지 작성 모달 ★★★ */}
+          {isNoticeWriteModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-lg border border-slate-300 shadow-2xl">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    📢 팀 전체 공유 공지 등록
+                  </h3>
+                  <span className="text-xs text-blue-600 font-bold bg-blue-50 px-2.5 py-1 rounded-full">
+                    작성자: {currentUser.name}
+                  </span>
+                </div>
+
+                <form onSubmit={handleCreateNotice} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">공지 구분 / 중요도</label>
+                    <select
+                      value={noticePriority}
+                      onChange={(e) => setNoticePriority(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    >
+                      <option value="긴급">🚨 긴급 (인프라 장애 / 긴급 점검)</option>
+                      <option value="필독">📌 필독 (주요 전달사항 및 근무 지침)</option>
+                      <option value="일반">💬 일반 (업무 인수인계 및 팀 공유)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">공지 제목</label>
+                    <input
+                      type="text"
+                      value={noticeTitle}
+                      onChange={(e) => setNoticeTitle(e.target.value)}
+                      placeholder="예: 3개 센터 BMS 전압 변동 알람 조치 요령 전달"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">상세 내용 및 인수인계 사항</label>
+                    <textarea
+                      rows="6"
+                      value={noticeContent}
+                      onChange={(e) => setNoticeContent(e.target.value)}
+                      placeholder="팀원들이 로그인 시 숙지해야 할 내용을 상세히 입력하십시오."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3 text-xs text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setIsNoticeWriteModalOpen(false)}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-black rounded-xl shadow-md transition"
+                    >
+                      Firebase DB에 즉시 등록 및 전파
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ★★★ [신규 모달 3] 팀내 주요 공지내용 확인 (목록 및 열람) ★★★ */}
+          {isNoticeListModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-3xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                      📋 팀내 주요 공지내용 확인
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Firebase DB에 저장된 팀 전체 인수인계 및 지휘 지침 히스토리를 확인합니다.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setIsNoticeListModalOpen(false);
+                      setIsNoticeWriteModalOpen(true);
+                    }}
+                    className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black transition"
+                  >
+                    + 새 공지 쓰기
+                  </button>
+                </div>
+
+                <div className="overflow-y-auto flex-1 pr-1 space-y-3">
+                  {notices.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 text-xs">
+                      등록된 공지사항이 없습니다. 새 공지를 등록해 보십시오.
+                    </div>
+                  ) : (
+                    notices.map((n) => (
+                      <div key={n.key} className="p-4 rounded-2xl bg-slate-50 border border-slate-200 hover:border-blue-300 transition">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black ${
+                              n.priority === '긴급' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                              n.priority === '필독' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                              'bg-slate-200 text-slate-700'
+                            }`}>
+                              {n.priority}
+                            </span>
+                            <h4 className="text-sm font-extrabold text-slate-900">{n.title}</h4>
+                          </div>
+                          <span className="text-[11px] text-slate-400 font-mono">{n.dateStr}</span>
+                        </div>
+                        <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed pl-1 mb-2">
+                          {n.content}
+                        </p>
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-200/60">
+                          <span>작성 대원: <strong>{n.authorName}</strong></span>
+                          {(currentUser.role === 'admin' || currentUser.id === n.authorId) && (
+                            <button
+                              onClick={() => handleDeleteNotice(n.key)}
+                              className="text-rose-600 hover:text-rose-800 font-bold"
+                            >
+                              삭제
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-4 mt-3 border-t border-slate-200">
+                  <button
+                    onClick={() => setIsNoticeListModalOpen(false)}
+                    className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-black rounded-xl transition"
+                  >
+                    닫기
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 모달 4: 1년치 공평성 검증 창 */}
           {isFairnessModalOpen && fairnessAnalysis && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
               <div className="bg-white rounded-3xl p-6 w-full max-w-4xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
@@ -785,7 +1210,6 @@
                   )}
                 </div>
 
-                {/* 핵심 브리핑 요약 배너 */}
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200 mb-4 text-xs space-y-1.5">
                   <p className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
                     <span>⚖️</span> {fairnessAnalysis.memberName} 대원의 1년치 공평성 종합 평가
@@ -803,7 +1227,6 @@
                   </p>
                 </div>
 
-                {/* 1월 ~ 12월 월별 상세 표 */}
                 <div className="overflow-y-auto flex-1 pr-1 border border-slate-200 rounded-2xl">
                   <table className="w-full text-center border-collapse text-xs">
                     <thead>
@@ -865,17 +1288,70 @@
             </div>
           )}
 
-          {/* 모달 2: 관리자 전용 팀원 명단 모달 */}
+          {/* 모달 5: 대원 본인 ID/PW 변경 */}
+          {isMyAccountModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-md border border-slate-300 shadow-2xl">
+                <h3 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
+                  🔑 내 계정 정보 설정
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  <strong>{currentUser.name}</strong> 대원님의 로그인 ID와 비밀번호를 변경합니다.
+                </p>
+
+                <div className="space-y-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">로그인 아이디 (ID)</label>
+                    <input
+                      type="text"
+                      value={newMyId}
+                      onChange={(e) => setNewMyId(e.target.value)}
+                      placeholder="새 ID 입력"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">새 비밀번호 (PW)</label>
+                    <input
+                      type="password"
+                      value={newMyPw}
+                      onChange={(e) => setNewMyPw(e.target.value)}
+                      placeholder="변경할 새 비밀번호 입력 (미입력 시 기존 유지)"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-6 pt-3 border-t border-slate-200">
+                  <button
+                    onClick={() => setIsMyAccountModalOpen(false)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleSaveMyAccount}
+                    className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-md transition"
+                  >
+                    내 계정 변경 저장
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 모달 6: 관리자 전용 팀원 계정/명단 관리 */}
           {isRosterModalOpen && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-3xl p-6 w-full max-w-2xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
+              <div className="bg-white rounded-3xl p-6 w-full max-w-3xl border border-slate-300 shadow-2xl max-h-[90vh] flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-3">
                   <div>
                     <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
-                      👥 교대근무 팀원 이름 관리 (Firebase Realtime DB)
+                      👥 교대근무 팀원 계정/명단 관리 (Firebase Realtime DB)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      수정한 이름은 데이터베이스에 영구 저장되어 모든 브라우저 및 스마트폰에 실시간으로 반영됩니다.
+                      각 대원의 ID, 실제 성함, 비밀번호를 관리합니다.
                     </p>
                   </div>
                   <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-bold border border-blue-200">
@@ -885,26 +1361,42 @@
 
                 <div className="overflow-y-auto flex-1 pr-1 space-y-2">
                   <div className="grid grid-cols-12 gap-2 text-xs font-bold text-slate-500 px-3 py-1 bg-slate-50 rounded-lg">
-                    <span className="col-span-2">순번</span>
+                    <span className="col-span-1">순번</span>
                     <span className="col-span-3">로그인 ID</span>
-                    <span className="col-span-7">근무자 성함</span>
+                    <span className="col-span-4">실제 성함 (이름 매핑)</span>
+                    <span className="col-span-4">비밀번호 (PW)</span>
                   </div>
 
                   {tempRoster.map((item, idx) => (
-                    <div key={item.id} className="grid grid-cols-12 gap-2 items-center p-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 transition">
-                      <span className="col-span-2 text-xs font-bold text-slate-400 pl-2">
+                    <div key={idx} className="grid grid-cols-12 gap-2 items-center p-2 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-300 transition">
+                      <span className="col-span-1 text-xs font-bold text-slate-400 pl-1">
                         #{String(idx + 1).padStart(2, '0')}
                       </span>
-                      <span className="col-span-3 text-xs font-mono font-bold text-blue-600 bg-blue-50 py-1 px-2 rounded">
-                        {item.id}
-                      </span>
-                      <div className="col-span-7">
+                      <div className="col-span-3">
+                        <input
+                          type="text"
+                          value={item.id}
+                          onChange={(e) => handleRosterFieldChange(idx, "id", e.target.value)}
+                          placeholder="ID"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="col-span-4">
                         <input
                           type="text"
                           value={item.name}
-                          onChange={(e) => handleNameChange(idx, e.target.value)}
-                          placeholder={`대원${idx+1} 성함`}
-                          className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          onChange={(e) => handleRosterFieldChange(idx, "name", e.target.value)}
+                          placeholder="성함 (예: 김경준)"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="col-span-4">
+                        <input
+                          type="text"
+                          value={item.pw || "1234"}
+                          onChange={(e) => handleRosterFieldChange(idx, "pw", e.target.value)}
+                          placeholder="비밀번호"
+                          className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
                     </div>
@@ -913,7 +1405,7 @@
 
                 <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-3">
                   <span className="text-[11px] text-slate-500">
-                    * [Firebase DB에 영구 저장] 클릭 시 즉시 전 기기 반영
+                    * [Firebase DB에 영구 저장] 클릭 시 전 기기에 실시간 반영됩니다.
                   </span>
                   <div className="flex gap-2">
                     <button
@@ -953,10 +1445,24 @@
         setCurrentUser(null);
       };
 
+      const handleUpdateCurrentUserName = (newName) => {
+        if (currentUser) {
+          const updated = { ...currentUser, name: newName };
+          setCurrentUser(updated);
+          localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(updated));
+        }
+      };
+
       if (!currentUser) {
         return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
       }
-      return <MainDashboard currentUser={currentUser} onLogout={handleLogout} />;
+      return (
+        <MainDashboard
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          onUpdateCurrentUserName={handleUpdateCurrentUserName}
+        />
+      );
     }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
