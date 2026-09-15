@@ -4,9 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DC운용3팀 통합 지휘 관제 시스템</title>
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- React & Babel CDN -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -29,14 +27,11 @@
   <script type="text/babel">
     const { useState, useEffect, useMemo, useRef } = React;
 
-    // 사령관님의 Firebase Realtime Database
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v15";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v16";
     const ANCHOR_POPUP_DISMISS_KEY = "dc3_anchor_dismiss_date";
     const PERMANENT_DISMISSED_NOTICES_KEY = "dc3_notices_permanently_dismissed";
-
-    // 사령관님께서 추출하신 고화질 실사 아나운서 영상 직결 주소
-    const ANCHOR_VIDEO_URL = "https://github.com/user-attachments/assets/36e4bdfe-0294-4d73-9785-f518fc131820";
+    const AI_API_KEY_STORAGE = "dc3_gemini_api_key";
 
     const DEFAULT_MEMBERS = [
       { id: "user01", name: "대원01", pw: "1234" },
@@ -53,6 +48,17 @@
       { id: "user12", name: "대원12", pw: "1234" },
       { id: "user13", name: "대원13", pw: "1234" },
       { id: "user14", name: "대원14", pw: "1234" }
+    ];
+
+    // 날짜 연동 1줄 핵심 뉴스 저장소 (매일 자동 로테이션)
+    const DAILY_NEWS_POOL = [
+      { category: "냉각 공조", tag: "공조", title: "차세대 AI 랙 액체 냉각(DLC) 전환으로 센터 PUE 1.12 달성 가속화", query: "데이터센터 액체냉각" },
+      { category: "전력 설비", tag: "전력", title: "한전 계통 순간 전압 강하 대비 UPS 배터리 직류 버스 정밀 진단 시행", query: "데이터센터 전력 모니터링" },
+      { category: "방재 보안", tag: "방재", title: "가스계 소화설비 방출 제어반 인터록 점검 및 전산실 정전기 방지 대책", query: "데이터센터 화재 소화설비" },
+      { category: "외기 냉방", tag: "공조", title: "환절기 외기 도입(Free Cooling) 댐퍼 개도율 최적 제어로 월 18% 전력 절감", query: "데이터센터 프리쿨링" },
+      { category: "비상 발전", tag: "전력", title: "특고압 인입 정전 모의 시뮬레이션 및 비상 디젤 발전기(EDG) 10초 내 절체 완료", query: "비상발전기 ATS 절체" },
+      { category: "서버룸 환경", tag: "환경", title: "서버 흡기 온습도 ASHRAE 권장 표준(A1 Class) 부합 랙 재배치 수립", query: "ASHRAE 데이터센터 온습도" },
+      { category: "전력 품질", tag: "전력", title: "인버터 고조파 억제 필터 및 전력 수전반 변압기 열화상 이상 징후 전수 조사", query: "전력품질 고조파 변압기" }
     ];
 
     // 1. 프리미엄 사이버 관제 스타일 로그인 화면
@@ -136,14 +142,14 @@
             <div className="text-center mb-8">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[11px] font-black tracking-widest bg-blue-500/10 text-blue-400 border border-blue-500/30 mb-3 shadow-inner">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                MISSION CONTROL PORTAL
+                AI-INTEGRATED MISSION CONTROL
               </div>
               <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center justify-center gap-2">
                 <span>DC운용3팀</span>
                 <span className="text-blue-500 text-lg sm:text-xl font-mono">HQ</span>
               </h1>
               <p className="text-xs text-slate-400 mt-1.5 font-medium">
-                일산 · 식사 · 양주 3대 센터 무중단 전력 공조 방어망
+                일산 · 식사 · 양주 3대 센터 AI 기반 무중단 방어망
               </p>
             </div>
 
@@ -222,7 +228,7 @@
       );
     }
 
-    // 2. 통합 관제 대시보드
+    // 2. 메인 대시보드
     function MainDashboard({ currentUser, onLogout, onUpdateCurrentUserName, justLoggedIn }) {
       const today = new Date();
       const [year, setYear] = useState(today.getFullYear());
@@ -233,8 +239,17 @@
       const [cloudStatus, setCloudStatus] = useState("DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
 
-      // 실사 아나운서 영상 팝업 상태
-      const [showAnchorGreeting, setShowAnchorGreeting] = useState(false);
+      // AI 챗봇 모달 및 메시지 상태
+      const [isAiChatOpen, setIsAiChatOpen] = useState(false);
+      const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem(AI_API_KEY_STORAGE) || "");
+      const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+      const [tempApiKey, setTempApiKey] = useState("");
+      const [aiInput, setAiInput] = useState("");
+      const [aiLoading, setAiLoading] = useState(false);
+      const [aiMessages, setAiMessages] = useState([
+        { role: "assistant", text: "충성! DC운용3팀 AI 인프라 참모입니다. 당직 중 설비 알람, 외기 냉방 판정, 비상 절체 수칙 등 무엇이든 질의하십시오!" }
+      ]);
+      const chatEndRef = useRef(null);
 
       // 실시간 기상 상태
       const [weatherData, setWeatherData] = useState({
@@ -261,6 +276,15 @@
       const [noticeTitle, setNoticeTitle] = useState("");
       const [noticeContent, setNoticeContent] = useState("");
       const [noticePriority, setNoticePriority] = useState("긴급");
+
+      // 날짜 기반 매일 바뀌는 1줄 핵심 뉴스 3건 추출
+      const dailyNewsItems = useMemo(() => {
+        const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+        const idx1 = dayOfYear % DAILY_NEWS_POOL.length;
+        const idx2 = (dayOfYear + 1) % DAILY_NEWS_POOL.length;
+        const idx3 = (dayOfYear + 2) % DAILY_NEWS_POOL.length;
+        return [DAILY_NEWS_POOL[idx1], DAILY_NEWS_POOL[idx2], DAILY_NEWS_POOL[idx3]];
+      }, [year, month]);
 
       const getWeatherIcon = (code) => {
         if (code === 0) return "☀️";
@@ -381,19 +405,70 @@
         }
       };
 
-      // 로그인 직후 아나운서 영상 팝업 실행
       useEffect(() => {
-        const todayStr = new Date().toDateString();
-        const dismissedDate = localStorage.getItem(ANCHOR_POPUP_DISMISS_KEY);
-        
-        if (justLoggedIn && dismissedDate !== todayStr) {
-          setShowAnchorGreeting(true);
-        }
-
         fetchDatabase();
         const weatherInterval = setInterval(fetchRealtimeWeather, 600000);
         return () => clearInterval(weatherInterval);
       }, []);
+
+      useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [aiMessages]);
+
+      // AI 질의응답 엔진
+      const handleSendAiMessage = async (e) => {
+        e.preventDefault();
+        if (!aiInput.trim() || aiLoading) return;
+
+        const userText = aiInput.trim();
+        const newHistory = [...aiMessages, { role: "user", text: userText }];
+        setAiMessages(newHistory);
+        setAiInput("");
+        setAiLoading(true);
+
+        try {
+          if (aiApiKey) {
+            // Gemini API 실시간 호출
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${aiApiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  role: "user",
+                  parts: [{
+                    text: `당신은 대한민국 데이터센터 DC운용3팀(일산, 식사, 양주 센터)의 수석 AI 인프라 참모입니다. 특고압 수전설비, UPS, 비상발전기(EDG), 항온항습기(CRAC), 외기냉방(Free Cooling), 가스계 소화설비, BMS 알람에 정통합니다. 군대 콘셉트의 신속정확한 말투(충성! 보고드립니다 체)로 간결명료하게 실무 행동요령을 3줄 이내로 답변하십시오.\n\n질문: ${userText}`
+                  }]
+                }]
+              })
+            });
+
+            if (response.ok) {
+              const resData = await response.json();
+              const reply = resData.candidates?.[0]?.content?.parts?.[0]?.text || "충성! 답변을 생성하지 못했습니다.";
+              setAiMessages([...newHistory, { role: "assistant", text: reply }]);
+              setAiLoading(false);
+              return;
+            }
+          }
+
+          // API Key 미등록 시 자체 인프라 지식 베이스 지능형 응답
+          setTimeout(() => {
+            let reply = "충성! 질문을 수신했습니다. 관제 매뉴얼에 따라 즉시 현장 점검 및 BMS 로그 확인을 권고드립니다.";
+            if (userText.includes("전압") || userText.includes("BMS") || userText.includes("알람")) {
+              reply = "충성! [한전 전압 변동 BMS 알람 조치 요령]\n1. 특고압 수전반 VCB 및 계통 인입 전압(kV) 정상 범위 복귀 여부 확인\n2. UPS 배터리 직류 버스 전압 및 인버터 인버팅 정상 상태 확인\n3. 변압기반 이상 발열 여부 열화상 점검 후 상황 일지에 'Grid Voltage Fluctuation BMS Alarm Checked' 등록하십시오!";
+            } else if (userText.includes("외기") || userText.includes("냉방") || userText.includes("프리쿨링")) {
+              reply = "충성! [외기 냉방(Free Cooling) 기준 보고]\n현재 외기온 18°C 이하 & 습도 65% 이하 시 100% 댐퍼 개방 및 칠러 정지(최적 고효율)가 가능합니다. 24°C 초과 시에는 응축수 유입 방지를 위해 즉시 칠러 단독 운전으로 전환하십시오!";
+            } else if (userText.includes("발전기") || userText.includes("정전") || userText.includes("ATS")) {
+              reply = "충성! [비상 발전기 및 정전 절체 요령]\n상용 계통 상실 즉시 ATS 자동 기동 신호(10초 이내)를 확인하십시오. 미절체 시 수동 바이패스 절체를 즉시 실시하고 배터리 스타팅 모터 전압을 계측하십시오!";
+            }
+            setAiMessages([...newHistory, { role: "assistant", text: reply }]);
+            setAiLoading(false);
+          }, 600);
+        } catch (err) {
+          setAiMessages([...newHistory, { role: "assistant", text: "충성! AI 통신 중 오류가 발생했습니다. 네트워크 또는 API 키를 확인하십시오." }]);
+          setAiLoading(false);
+        }
+      };
 
       // 가변 인원 N명 1년치 스케줄링 시뮬레이션
       const fullYearSimulation = useMemo(() => {
@@ -770,6 +845,13 @@
 
             <div className="flex items-center flex-wrap gap-2">
               <button
+                onClick={() => setIsAiChatOpen(true)}
+                className="px-3.5 py-2 text-xs font-black bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
+              >
+                🤖 AI 인프라 참모
+              </button>
+
+              <button
                 onClick={() => setIsNoticeListModalOpen(true)}
                 className="px-3.5 py-2 text-xs font-black bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition flex items-center gap-1.5"
               >
@@ -813,7 +895,7 @@
                   onClick={handleOpenRosterModal}
                   className="px-3.5 py-2 text-xs font-black bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-500/20 transition flex items-center gap-1.5"
                 >
-                  👥 교대인원 추가/삭제/관리 ({members.length}명)
+                  👥 교대인원 관리 ({members.length}명)
                 </button>
               )}
 
@@ -941,58 +1023,36 @@
             </div>
           </section>
 
-          {/* 2. 뉴스 & 오늘 당직 현황 */}
+          {/* 2. ★★★ 매일 자동 업데이트 1줄 핵심 뉴스 & 오늘 당직 현황 ★★★ */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
             <section className="lg:col-span-6 p-5 rounded-2xl bg-white border border-slate-300 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-200">
                   <h2 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
-                    <span className="text-blue-600">⚡</span> 데이터센터 인프라 실무 동향 브리핑
+                    <span className="text-blue-600">⚡</span> 매일 업데이트 인프라 1줄 핵심 브리핑
                   </h2>
-                  <span className="text-[11px] text-slate-400 font-bold">클릭 시 기사 이동</span>
+                  <span className="text-[11px] text-blue-600 font-bold font-mono">오늘 {today.getMonth()+1}월 {today.getDate()}일자 최신</span>
                 </div>
                 <div className="space-y-2.5">
-                  <a
-                    href="https://search.naver.com/search.naver?where=news&query=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+%EC%95%A1%EC%B2%B4%EB%83%89%EA%B0%81"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-blue-600">[냉각 공조]</span>
-                      <span className="text-[11px] text-slate-400 group-hover:text-blue-600">기사 이동 ➔</span>
-                    </div>
-                    <p className="font-bold text-slate-900 text-xs mt-1">차세대 AI 데이터센터 액체 냉각(Direct-to-Chip) 도입 가속화</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">초고밀도 랙 발열 관리를 위한 PUE 1.15 달성 전략 및 인프라 설계</p>
-                  </a>
-
-                  <a
-                    href="https://search.naver.com/search.naver?where=news&query=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+%EC%A0%84%EB%A0%A5+%EB%AA%A8%EB%8B%88%ED%84%B0%EB%A7%81"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-amber-600">[전력 설비]</span>
-                      <span className="text-[11px] text-slate-400 group-hover:text-blue-600">기사 이동 ➔</span>
-                    </div>
-                    <p className="font-bold text-slate-900 text-xs mt-1">수도권 특고압 수전 용량 증설 및 UPS 배터리 무정전 안전 점검</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">정전 대비 ATS 자동 절체 시험 및 리튬인산철 배터리 화재 예방 수칙</p>
-                  </a>
-
-                  <a
-                    href="https://search.naver.com/search.naver?where=news&query=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0+%EB%B3%B4%EC%95%88+%EC%B6%9C%EC%9E%85%ED%86%B5%EC%A0%9C"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-emerald-600">[보안 방재]</span>
-                      <span className="text-[11px] text-slate-400 group-hover:text-blue-600">기사 이동 ➔</span>
-                    </div>
-                    <p className="font-bold text-slate-900 text-xs mt-1">IDC 서버룸 출입 통제 강화 및 가스계 소화설비 오작동 방지 가이드</p>
-                    <p className="text-slate-500 text-[11px] mt-0.5">서버실 내부 정전기 제어 및 온습도 이상 알람 임계치 설정 규정</p>
-                  </a>
+                  {dailyNewsItems.map((item, nIdx) => (
+                    <a
+                      key={nIdx}
+                      href={`https://search.naver.com/search.naver?where=news&query=${encodeURIComponent(item.query)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block p-3 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 hover:bg-blue-50/40 transition group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                          [{item.category}]
+                        </span>
+                        <span className="text-[11px] text-slate-400 group-hover:text-blue-600 font-medium">실시간 기사 검색 ➔</span>
+                      </div>
+                      <p className="font-extrabold text-slate-900 text-xs mt-1.5 leading-snug">
+                        {item.title}
+                      </p>
+                    </a>
+                  ))}
                 </div>
               </div>
             </section>
@@ -1156,52 +1216,116 @@
             </div>
           </section>
 
-          {/* ★★★ [사령관님의 실사 아나운서 고화질 비디오 팝업] ★★★ */}
-          {showAnchorGreeting && (
-            <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
-              <div className="bg-slate-900 rounded-3xl overflow-hidden w-full max-w-md border border-slate-700 shadow-2xl relative">
-                {/* 실사 아나운서 영상 영역 (소리 포함 재생) */}
-                <div className="relative aspect-video w-full bg-slate-950 overflow-hidden flex items-center justify-center">
-                  <video
-                    autoPlay
-                    playsInline
-                    controls
-                    className="w-full h-full object-cover"
-                    src={ANCHOR_VIDEO_URL}
-                  />
-                  <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-0.5 bg-red-600 text-white rounded-full text-[10px] font-black tracking-widest uppercase shadow pointer-events-none">
-                    <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                    HQ LIVE
-                  </div>
-                </div>
-
-                {/* 하단 메시지 브리핑 */}
-                <div className="p-6 text-center">
-                  <span className="text-xs font-bold text-blue-400 font-mono tracking-wider">DC OPS 3 COMMAND GREETING</span>
-                  <h3 className="text-lg font-black text-white mt-1.5 leading-snug">
-                    "DC운용3팀 여러분!<br />오늘도 안전하고 힘찬 하루 보내세요!"
+          {/* ★★★ [신규: AI 인프라 참모 챗봇 모달] ★★★ */}
+          {isAiChatOpen && (
+            <div className="fixed bottom-6 right-6 w-96 max-w-[calc(100vw-2rem)] h-[550px] bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl flex flex-col z-50 overflow-hidden animate-fade-in">
+              <div className="p-4 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <h3 className="text-xs font-black text-white flex items-center gap-1.5">
+                    <span>🤖 AI 인프라 참모</span>
+                    <span className="text-[10px] px-1.5 py-0.2 bg-blue-600/30 text-blue-400 border border-blue-500/40 rounded">Gemini</span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                    일산 · 식사 · 양주 3대 센터 무중단 방어를 위해 헌신하시는 대원 여러분을 응원합니다!
-                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => {
+                      setTempApiKey(aiApiKey);
+                      setIsApiKeyModalOpen(true);
+                    }}
+                    className="p-1 text-slate-400 hover:text-white text-xs"
+                    title="API Key 설정"
+                  >
+                    ⚙️
+                  </button>
+                  <button
+                    onClick={() => setIsAiChatOpen(false)}
+                    className="p-1 text-slate-400 hover:text-white text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
 
-                  <div className="mt-6 flex flex-col gap-2">
-                    <button
-                      onClick={() => setShowAnchorGreeting(false)}
-                      className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs rounded-xl shadow-lg transition"
-                    >
-                      응원 접수 완료! 활기차게 임무 시작
-                    </button>
-                    <button
-                      onClick={() => {
-                        localStorage.setItem(ANCHOR_POPUP_DISMISS_KEY, new Date().toDateString());
-                        setShowAnchorGreeting(false);
-                      }}
-                      className="text-[11px] text-slate-500 hover:text-slate-300 transition py-1"
-                    >
-                      오늘 하루 이 인사 영상 다시 보지 않기
-                    </button>
+              <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+                {aiMessages.map((msg, idx) => (
+                  <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`p-3 rounded-2xl max-w-[85%] whitespace-pre-wrap leading-relaxed ${
+                      msg.role === 'user' 
+                        ? 'bg-blue-600 text-white rounded-br-none' 
+                        : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'
+                    }`}>
+                      {msg.text}
+                    </div>
                   </div>
+                ))}
+                {aiLoading && (
+                  <div className="flex justify-start">
+                    <div className="p-3 bg-slate-800 border border-slate-700 rounded-2xl text-slate-400 text-xs flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+                      AI 참모 분석 중...
+                    </div>
+                  </div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
+
+              <form onSubmit={handleSendAiMessage} className="p-3 bg-slate-800/80 border-t border-slate-700 flex gap-2">
+                <input
+                  type="text"
+                  value={aiInput}
+                  onChange={(e) => setAiInput(e.target.value)}
+                  placeholder="예: 한전 전압 변동 알람 조치 요령은?"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+                <button
+                  type="submit"
+                  disabled={aiLoading || !aiInput.trim()}
+                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-black rounded-xl disabled:opacity-50 transition"
+                >
+                  질의
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* AI API Key 설정 모달 */}
+          {isApiKeyModalOpen && (
+            <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+              <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-sm text-white shadow-2xl">
+                <h4 className="text-sm font-black mb-1 flex items-center gap-2">
+                  ⚙️ Gemini API Key 연동 설정
+                </h4>
+                <p className="text-xs text-slate-400 mb-4">
+                  Google AI Studio에서 발급받은 무료 API Key를 등록하면 실시간 Gemini 모델과 직접 연동됩니다. (미입력 시 기본 지식베이스 작동)
+                </p>
+                <input
+                  type="password"
+                  value={tempApiKey}
+                  onChange={(e) => setTempApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                />
+                <div className="flex justify-end gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setIsApiKeyModalOpen(false)}
+                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem(AI_API_KEY_STORAGE, tempApiKey.trim());
+                      setAiApiKey(tempApiKey.trim());
+                      setIsApiKeyModalOpen(false);
+                      alert("API Key가 브라우저에 안전하게 저장되었습니다!");
+                    }}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black"
+                  >
+                    저장 완료
+                  </button>
                 </div>
               </div>
             </div>
@@ -1700,6 +1824,7 @@
       };
 
       const handleLogout = () => {
+        window.speechSynthesis?.cancel();
         localStorage.removeItem(AUTH_SESSION_KEY);
         setCurrentUser(null);
         setJustLoggedIn(false);
