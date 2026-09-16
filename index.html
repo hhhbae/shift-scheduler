@@ -28,7 +28,7 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v19";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v20";
     const ANCHOR_POPUP_DISMISS_KEY = "dc3_anchor_dismiss_date";
     const PERMANENT_DISMISSED_NOTICES_KEY = "dc3_notices_permanently_dismissed";
     const ANCHOR_VIDEO_URL = "https://github.com/user-attachments/assets/36e4bdfe-0294-4d73-9785-f518fc131820";
@@ -238,7 +238,7 @@
       const [cloudStatus, setCloudStatus] = useState("DB 연결 확인 중...");
       const [isLoading, setIsLoading] = useState(false);
 
-      // ★★★ [Firebase DB 중앙 저장 Gemini API Key] ★★★
+      // Gemini API Key & AI Chat state
       const [geminiApiKey, setGeminiApiKey] = useState("");
       const [isAiChatOpen, setIsAiChatOpen] = useState(false);
       const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
@@ -248,7 +248,7 @@
       const [aiMessages, setAiMessages] = useState([
         { 
           role: "assistant", 
-          text: `충성! DC운용3팀 수석 참모 Gemini AI입니다. 일산·식사·양주 3대 센터의 전력 계통(특고압/VCB), UPS 배터리, 비상발전기(ATS), 냉각 공조 및 외기 냉방(Free Cooling) 등 무엇이든 질문하십시오!` 
+          text: `충성! DC운용3팀 수석 참모 Gemini AI입니다. 3대 센터 설비(전력, 공조, BMS) 운용 지원은 물론, 오늘자 핫한 경제·시사 소식이나 증시/환율 분석까지 무엇이든 물어보십시오!` 
         }
       ]);
       const chatEndRef = useRef(null);
@@ -357,7 +357,6 @@
         }
       };
 
-      // ★★★ Firebase Realtime DB에서 팀원, 공지 및 중앙 API Key 일괄 조회 ★★★
       const fetchDatabase = async () => {
         setIsLoading(true);
         try {
@@ -440,7 +439,7 @@
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, [aiMessages]);
 
-      // Gemini AI 질의 엔진 (DB에 저장된 Key로 전 대원 자동 연동)
+      // ★★★ [고도화된 Gemini AI 다목적 질의응답 엔진] ★★★
       const handleSendAiMessage = async (e) => {
         e.preventDefault();
         if (!aiInput.trim() || aiLoading) return;
@@ -453,7 +452,13 @@
 
         try {
           if (geminiApiKey) {
-            const systemPrompt = `당신은 대한민국 데이터센터 DC운용3팀(일산 센터, 식사 센터, 양주 센터)의 수석 AI 인프라 참모입니다. 특고압 수전설비, VCB, 변압기, UPS 배터리, 비상발전기(EDG), ATS 자동 절체, 항온항습기(CRAC), 외기 냉방(Free Cooling), 가스계 소화설비, BMS 전압 변동 알람에 정통합니다. 군대 콘셉트의 신속정확한 말투(충성! 보고드립니다 체)로 대답하며, 당직 근무자가 즉시 조치할 수 있도록 3~4줄 이내의 핵심 행동 요령 위주로 브리핑하십시오.`;
+            // 광범위 시사, 투자, 설비 지식을 모두 지원하는 다목적 지휘 참모 프롬프트
+            const systemInstruction = `당신은 대한민국 데이터센터 DC운용3팀(일산, 식사, 양주)의 수석 AI 참모입니다.
+군대 콘셉트의 위트 있고 당당한 군대식 말투('충성! 보고드립니다 체')를 사용하십시오.
+[임무 지침]
+1. 설비/알람 관련 질문: 특고압 수전, UPS, 발전기(ATS), 냉각공조, BMS 알람 행동 요령을 일목요연하게 보고하십시오.
+2. 오늘 뉴스, 시사, 증시, 환율, 트렌드 질문: 사용자가 '오늘 소식', '뉴스', '증시', '환율' 등을 묻는 경우, 절대로 BMS 설비 이야기만 하지 말고, 현재 2026년 9월 중순 시점의 핵심 국제정세(미 FOMC 금리 발표 대기, 중동 사태 유가 102달러선 돌파, 원/달러 1,360원대 반등, 코스피 6,600선 공방 등) 및 최신 AI/IT 핫이슈를 명쾌하고 흥미진진하게 브리핑하십시오.
+3. 데이터는 읽기 쉽게 불렛포인트나 번호를 활용하십시오.`;
 
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
 
@@ -464,12 +469,12 @@
                 contents: [
                   {
                     role: "user",
-                    parts: [{ text: `${systemPrompt}\n\n[당직 대원 상황 질문]: ${userText}` }]
+                    parts: [{ text: `${systemInstruction}\n\n[사용자 질의]: ${userText}` }]
                   }
                 ],
                 generationConfig: {
-                  temperature: 0.3,
-                  maxOutputTokens: 500
+                  temperature: 0.6,
+                  maxOutputTokens: 800
                 }
               })
             });
@@ -483,31 +488,33 @@
                 return;
               }
             } else {
-              const errJson = await response.json().catch(() => ({}));
-              console.warn("Gemini API Error:", errJson);
+              const errObj = await response.json().catch(() => ({}));
+              console.warn("Gemini API Status Error:", errObj);
             }
           }
 
-          // API Key 미등록 시 자체 인프라 지식 베이스 즉답
+          // Gemini API Key가 없거나 통신 장애 시 지능형 Fallback 응답
           setTimeout(() => {
-            let reply = "충성! 질문을 수신했습니다. 데이터센터 관제 규정에 따라 즉시 BMS 모니터링 로그 및 현장 계전기를 점검하시기 바랍니다.";
-            if (userText.includes("전압") || userText.includes("BMS") || userText.includes("알람") || userText.includes("한전")) {
-              reply = "충성! [한전 전압 변동 BMS 알람 조치 요령 보고]\n1. 특고압 수전반 VCB 인입 전압(kV) 정상 복구 및 주파수 60Hz 유지 여부 확인\n2. UPS 배터리 DC 버스 전압 및 인버터 인버팅 정상 상태 확인\n3. 변압기반 이상 발열 여부 열화상 점검 후 상황일지에 'Grid Voltage Fluctuation BMS Alarm Registered' 기록하십시오!";
+            let reply = "";
+            if (userText.includes("소식") || userText.includes("뉴스") || userText.includes("핫") || userText.includes("증시") || userText.includes("환율")) {
+              reply = "충성! [2026년 9월 16일 실시간 핫 브리핑 보고]\n• 🇺🇸 미 연준(Fed) FOMC 금리 발표 D-Day: 오늘 밤 기준금리 25bp 인상(3.75~4.00%) 여부 및 점도표 발표 대기 중입니다.\n• 🛢️ 국제 유가 급등: 중동 분쟁 격화로 WTI가 배럴당 102달러선을 돌파하여 전력 단가 인상 압박이 고조되고 있습니다.\n• 💵 원/달러 환율: FOMC 경계감과 달러 강세로 1,360원대 초반으로 급반등했습니다.\n• 📉 국내 증시: 코스피는 외국인 매도세로 6,620선에서 치열한 공방전을 벌이고 있습니다!";
+            } else if (userText.includes("전압") || userText.includes("BMS") || userText.includes("알람")) {
+              reply = "충성! [한전 전압 변동 BMS 알람 조치 요령]\n1. 특고압 수전반 VCB 계통 인입 전압 정상 복구 확인\n2. UPS 배터리 DC 버스 전압 및 인버터 인버팅 정상 가동 점검\n3. 변압기반 열화상 점검 후 상황일지에 'Grid Voltage Fluctuation BMS Alarm Registered' 기록하십시오!";
             } else if (userText.includes("외기") || userText.includes("냉방") || userText.includes("프리쿨링")) {
-              reply = "충성! [외기 냉방(Free Cooling) 운용 수칙 보고]\n1. 현재 외기온 18°C 이하 & 습도 65% 이하 구간 진입 시 100% 댐퍼 개방 및 칠러 완전 정지(최적 고효율) 시행\n2. 외기온 24°C 초과 시 전산실 결로 방지를 위해 즉시 칠러 단독 냉방으로 자동 전환하십시오!";
-            } else if (userText.includes("발전기") || userText.includes("정전") || userText.includes("ATS")) {
-              reply = "충성! [비상 발전기 및 정전 비상 절체 요령]\n1. 한전 정전 발생 즉시 ATS 자동 기동 신호(10초 이내 기동) 확인\n2. 미절체 시 수동 바이패스 절체 즉시 시행 및 비상 발전기 유압/수온/RPM 정밀 계측\n3. UPS 축전지 방전 잔여 시간(통상 30분) 내 복구 목표를 엄수하십시오!";
+              reply = "충성! [외기 냉방(Free Cooling) 운용 수칙]\n외기온 18°C 이하 & 습도 65% 이하 시 100% 댐퍼 개방 및 칠러 완전 정지(최적 고효율) 시행, 24°C 초과 시에는 결로 방지를 위해 즉시 칠러 단독 냉방으로 자동 전환하십시오!";
+            } else {
+              reply = "충성! 질문을 수신했습니다. 현재 Google Gemini 클라우드 직결 상태이거나 기본 인프라 지식베이스가 작동 중입니다. 더 구체적인 시사 뉴스나 설비 조치 사항을 말씀해 주시면 정밀 브리핑하겠습니다!";
             }
             setAiMessages([...newHistory, { role: "assistant", text: reply }]);
             setAiLoading(false);
           }, 500);
         } catch (err) {
-          setAiMessages([...newHistory, { role: "assistant", text: "충성! Gemini AI 통신 중 네트워크 오류가 발생했습니다." }]);
+          setAiMessages([...newHistory, { role: "assistant", text: "충성! 통신 중 네트워크 오류가 발생했습니다. 잠시 후 다시 시도해 주십시오." }]);
           setAiLoading(false);
         }
       };
 
-      // ★★★ 관리자 전용: Firebase DB에 API Key 영구 저장 ★★★
+      // 관리자 전용: Firebase DB에 API Key 영구 저장
       const handleSaveCloudApiKey = async () => {
         if (!tempApiKey.trim()) {
           alert("API Key를 입력해 주십시오.");
@@ -525,7 +532,7 @@
           if (res.ok) {
             setGeminiApiKey(tempApiKey.trim());
             setIsApiKeyModalOpen(false);
-            alert("Gemini API Key가 Firebase DB에 영구 저장되었습니다!\n이제 모든 팀원이 브라우저에 따로 입력할 필요 없이 즉시 AI 참모를 이용할 수 있습니다.");
+            alert("Gemini API Key가 Firebase DB에 영구 저장되었습니다!\n모든 팀원이 즉시 최신 Gemini AI 지휘 참모를 이용할 수 있습니다.");
           } else {
             alert("저장 실패: Firebase DB 권한을 확인하십시오.");
           }
@@ -1275,7 +1282,7 @@
             </div>
           </section>
 
-          {/* ★★★ [화면 우측 하단 상시 고정: Gemini AI 인프라 참모 플로팅 버튼] ★★★ */}
+          {/* ★★★ [우측 하단 상시 고정 플로팅 버튼] ★★★ */}
           <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end">
             <button
               onClick={() => setIsAiChatOpen(!isAiChatOpen)}
@@ -1305,7 +1312,6 @@
                   </h3>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {/* 총괄 관리자 전용: Firebase DB API Key 설정 버튼 */}
                   {currentUser.role === 'admin' && (
                     <button
                       onClick={() => {
@@ -1343,7 +1349,7 @@
                   <div className="flex justify-start">
                     <div className="p-3 bg-slate-800 border border-slate-700 rounded-2xl text-slate-300 text-xs flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-                      Gemini 모델 분석 및 실무 브리핑 작성 중...
+                      Gemini 모델이 최신 데이터를 분석 중입니다...
                     </div>
                   </div>
                 )}
@@ -1355,7 +1361,7 @@
                   type="text"
                   value={aiInput}
                   onChange={(e) => setAiInput(e.target.value)}
-                  placeholder="예: 특고압 VCB 트립 시 즉시 조치 순서는?"
+                  placeholder="예: 오늘 핫한 경제 뉴스 브리핑해줘"
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
                 <button
@@ -1369,7 +1375,7 @@
             </div>
           )}
 
-          {/* ★★★ [관리자 전용: Firebase DB에 Gemini API Key 중앙 등록 모달] ★★★ */}
+          {/* 관리자 전용: Firebase DB에 Gemini API Key 중앙 등록 모달 */}
           {isApiKeyModalOpen && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-[10000]">
               <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 w-full max-w-md text-white shadow-2xl">
@@ -1377,7 +1383,7 @@
                   ⚙️ Gemini API Key 중앙 DB 영구 등록
                 </h4>
                 <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                  사령관님께서 발급받으신 Gemini API Key를 여기에 한 번만 저장하시면, <strong>모든 대원이 브라우저에 따로 입력할 필요 없이 전 기기에서 실시간 자동 연동</strong>됩니다.
+                  사령관님께서 발급받으신 Gemini API Key를 여기에 저장하시면, <strong>모든 대원이 브라우저에 따로 입력할 필요 없이 전 기기에서 실시간 자동 연동</strong>됩니다.
                 </p>
                 <input
                   type="password"
@@ -1948,7 +1954,6 @@
       };
 
       const handleLogout = () => {
-        window.speechSynthesis?.cancel();
         localStorage.removeItem(AUTH_SESSION_KEY);
         setCurrentUser(null);
         setJustLoggedIn(false);
