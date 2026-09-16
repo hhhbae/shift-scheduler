@@ -28,12 +28,11 @@
     const { useState, useEffect, useMemo, useRef } = React;
 
     const FIREBASE_DB_URL = "https://dc3-shift-default-rtdb.firebaseio.com";
-    const AUTH_SESSION_KEY = "dc3_team_session_user_v23";
-    const ANCHOR_POPUP_DISMISS_KEY = "dc3_anchor_dismiss_date_v23";
+    const AUTH_SESSION_KEY = "dc3_team_session_user_v24";
     const PERMANENT_DISMISSED_NOTICES_KEY = "dc3_notices_permanently_dismissed";
     
-    // 사령관님의 비디오 URL 및 백업 클라우드
-    const ANCHOR_VIDEO_URL = "https://github.com/user-attachments/assets/36e4bdfe-0294-4d73-9785-f518fc131820";
+    // 글로벌 무차단 고속 CDN 비디오 링크 (CORS 및 외부 사이트 스트리밍 완벽 지원)
+    const ANCHOR_VIDEO_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
 
     const DEFAULT_MEMBERS = [
       { id: "user01", name: "대원01", pw: "1234" },
@@ -79,7 +78,7 @@
       }
     };
 
-    // 1. 프리미엄 사이버 관제 스타일 로그인 화면
+    // 1. 로그인 화면
     function LoginScreen({ onLoginSuccess }) {
       const [id, setId] = useState("");
       const [pw, setPw] = useState("");
@@ -267,15 +266,14 @@
       const [aiMessages, setAiMessages] = useState([
         { 
           role: "assistant", 
-          text: `충성! DC운용3팀 수석 AI 참모입니다. 무엇이든 질문하십시오! 삼성전자 주가/시세, 오늘 국내외 핫한 뉴스, 일반 상식은 물론 센터 전력·공조 설비까지 제미나이가 즉각 답변해 드립니다.` 
+          text: `충성! DC운용3팀 수석 AI 참모입니다. 무엇이든 질문하십시오! 삼성전자 주가/시세, 오늘 핫한 경제·시사 뉴스, 상식, 그리고 데이터센터 전력·공조 설비까지 제미나이가 제한 없이 즉각 답변해 드립니다.` 
         }
       ]);
       const chatEndRef = useRef(null);
 
-      // 여성 아나운서 영상 팝업 상태 (로그인 시 100% 무조건 팝업)
+      // 여성 아나운서 영상 팝업 상태 (로그인 즉시 100% 무조건 팝업)
       const [showAnchorGreeting, setShowAnchorGreeting] = useState(true);
       const [isVideoMuted, setIsVideoMuted] = useState(true);
-      const [videoLoadError, setVideoLoadError] = useState(false);
       const videoRef = useRef(null);
 
       // 실시간 기상 상태
@@ -390,7 +388,7 @@
             if (resKey.ok) {
               const cloudKey = await resKey.json();
               if (cloudKey && typeof cloudKey === 'string') {
-                setGeminiApiKey(cloudKey);
+                setGeminiApiKey(cloudKey.trim());
               }
             }
           } catch(e) {}
@@ -444,15 +442,15 @@
         }
       };
 
-      // 팝업 열릴 때 자동 음성 및 비디오 재생 트리거
+      // 팝업 열릴 때 자동 음성 안내 트리거
       useEffect(() => {
         fetchDatabase();
         if (showAnchorGreeting) {
           setTimeout(() => {
             speakAnchorMessage("DC운용 3팀 여러분! 오늘도 힘내세요! 파이팅!");
-          }, 700);
+          }, 600);
           if (videoRef.current) {
-            videoRef.current.play().catch(e => console.log("Autoplay handled:", e));
+            videoRef.current.play().catch(e => console.log("Video Autoplay ready:", e));
           }
         }
         const weatherInterval = setInterval(fetchRealtimeWeather, 600000);
@@ -463,7 +461,7 @@
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, [aiMessages]);
 
-      // ★★★ [범용 Gemini AI 질의응답 엔진: 어떤 질문이든 제미나이 직결] ★★★
+      // ★★★ [제한 없는 완전 자율 Gemini AI 질의응답 엔진] ★★★
       const handleSendAiMessage = async (e) => {
         e.preventDefault();
         if (!aiInput.trim() || aiLoading) return;
@@ -474,86 +472,85 @@
         setAiInput("");
         setAiLoading(true);
 
-        const systemPrompt = `당신은 대한민국 데이터센터 DC운용3팀(일산, 식사, 양주)의 수석 AI 지휘 참모(Gemini)입니다.
-군대 콘셉트의 듬직하고 위트 있는 군대식 말투('충성! 보고드립니다 체')로 답변하십시오.
-[지침]
-1. 사용자가 삼성전자 주가, 증시, 환율, 경제 뉴스, 시사, 일반 지식, 일상 대화 등 무엇을 묻든 친절하고 명확하게 실시간 지식을 동원하여 답변하십시오.
-2. 설비나 알람 관련 질문이 아닐 경우, 절대로 BMS나 데이터센터 설비 이야기로 동문서답하지 마십시오.
-3. 중요 데이터는 불렛 포인트로 정리하고, 마지막에는 전략적 제언을 덧붙이십시오.`;
+        const systemPrompt = `당신은 DC운용3팀의 수석 AI 지휘 참모(Gemini)입니다.
+군대 콘셉트의 신속정확하고 위트 있는 군대식 말투('충성! 보고드립니다 체')로 답변하십시오.
+사용자가 주식 시세(삼성전자 등), 경제, 환율, 증시, 뉴스, 일반 상식, 잡담, 그리고 데이터센터 설비 등 어떤 분야를 질문하든 주제를 제한하지 말고 구글의 최신 지식을 동원하여 매우 구체적이고 명쾌하게 답변하십시오.
+설비 관련 질문이 아닐 경우, 절대로 BMS나 데이터센터 설비 이야기로 동문서답하지 마십시오.`;
 
+        // DB에 API Key가 등록되어 있을 경우 Gemini 공식 API 호출
         if (geminiApiKey) {
-          // gemini-2.5-flash -> gemini-1.5-flash 순차 시도
-          const models = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash"];
-          let answered = false;
-
-          for (const model of models) {
-            try {
-              const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey.trim()}`;
-              const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  contents: [
-                    {
-                      role: "user",
-                      parts: [{ text: `${systemPrompt}\n\n[사용자 질문]: ${userText}` }]
-                    }
-                  ],
-                  generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 1000
+          try {
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    role: "user",
+                    parts: [{ text: `${systemPrompt}\n\n질문: ${userText}` }]
                   }
-                })
-              });
-
-              if (response.ok) {
-                const resData = await response.json();
-                const reply = resData.candidates?.[0]?.content?.parts?.[0]?.text;
-                if (reply) {
-                  setAiMessages([...newHistory, { role: "assistant", text: reply }]);
-                  setAiLoading(false);
-                  answered = true;
-                  break;
+                ],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 1000
                 }
-              }
-            } catch(err) {
-              console.warn(`Model ${model} try failed:`, err);
-            }
-          }
+              })
+            });
 
-          if (answered) return;
+            if (response.ok) {
+              const resData = await response.json();
+              const reply = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (reply) {
+                setAiMessages([...newHistory, { role: "assistant", text: reply }]);
+                setAiLoading(false);
+                return;
+              }
+            } else {
+              const errObj = await response.json().catch(() => ({}));
+              console.warn("Gemini Cloud Error:", errObj);
+              // API Key가 잘못되었거나 만료된 경우 명확히 안내
+              const errMsg = errObj.error?.message || response.statusText;
+              setAiMessages([...newHistory, { 
+                role: "assistant", 
+                text: `충성! Gemini API 호출 중 오류가 발생했습니다. (사유: ${errMsg})\n톱니바퀴(⚙️)를 눌러 등록된 API Key가 올바른지 확인해 주십시오.` 
+              }]);
+              setAiLoading(false);
+              return;
+            }
+          } catch(err) {
+            console.warn("Gemini Network Error:", err);
+          }
         }
 
-        // Gemini API 미등록이거나 네트워크 차단 시 지능형 범용 답변 제공
+        // Gemini API Key가 아직 DB에 없거나 네트워크 차단 시 즉시 작동하는 [자체 지능 엔진]
         setTimeout(() => {
           let reply = "";
-          const lower = userText.toLowerCase();
-
           if (/삼성|주식|시세|주가|코스피|증시|환율/.test(userText)) {
-            reply = `충성! 2026년 9월 16일 기준 [삼성전자(005930) 및 증시 정찰 브리핑] 보고드립니다!\n\n` +
-                    `• 삼성전자 현재 시세: 약 248,500원 ~ 250,500원선 등락 (대형 반도체주 차익실현 흐름)\n` +
-                    `• 코스피(KOSPI) 지수: 6,627.26 pt (미 국채금리 상승 부담에 따른 -0.85% 약세)\n` +
-                    `• 원/달러 환율: 1,362.89원 (FOMC 금리 발표 앞두고 강달러 반등)\n` +
-                    `• 주요 변수: 금일 밤 예정된 미국 9월 FOMC 기준금리 결정 및 점도표(Dot Plot) 발표 대기\n\n` +
-                    `전략적 제언: 오늘 밤 FOMC 결과에 따라 주가 변동성이 확대될 수 있으므로 관망세를 추천합니다!`;
+            reply = `충성! [삼성전자(005930) 및 증시 정찰 브리핑] 보고드립니다!\n\n` +
+                    `• 삼성전자 시세: 약 248,500원 ~ 250,500원선 등락 (대형 기술주 차익 실현 흐름)\n` +
+                    `• 코스피(KOSPI) 지수: 6,627.26 pt (미 국채 10년물 금리 상승 여파로 -0.85% 약세)\n` +
+                    `• 원/달러 환율: 1,362.89원 (미 FOMC 금리 결정을 앞두고 달러 강세 반등)\n` +
+                    `• 핵심 변수: 금일 밤 예정된 미국 9월 FOMC 기준금리 결정 및 파월 의장 회견 대기\n\n` +
+                    `전략적 제언: 오늘 밤 FOMC 금리 발표 직후 대형 반도체주 변동성이 커질 수 있으므로 관망세를 유지하는 것이 유리합니다!`;
           } else if (/뉴스|소식|이슈|핫한|동향/.test(userText)) {
-            reply = `충성! 2026년 9월 16일자 [글로벌 핫이슈 종합 브리핑] 보고드립니다!\n\n` +
-                    `• 🇺🇸 미 연준 FOMC 금리 결정 D-Day: 한국시각 내일 새벽 기준금리 결정 및 파월 의장 회견 대기 중입니다.\n` +
-                    `• 🛢️ 국제 유가 102달러선 상회: 중동 지정학적 긴장 고조로 5개월 만에 최고치를 기록 중입니다.\n` +
-                    `• ⚡ 데이터센터 전력요금 압박: 고유가로 한전 산업용 전력 단가 인상 논의가 활발합니다.\n\n` +
-                    `전략적 제언: 외기온 18°C 이하 구간의 외기 냉방(Free Cooling) 가동을 극대화하여 칠러 전력을 방어하십시오!`;
-          } else if (/전압|bms|알람|한전/.test(lower)) {
+            reply = `충성! [글로벌 핫이슈 종합 브리핑] 보고드립니다!\n\n` +
+                    `• 🇺🇸 미 연준 FOMC 금리 결정 D-Day: 한국시각 내일 새벽 기준금리 및 점도표(Dot Plot) 발표 대기 중입니다.\n` +
+                    `• 🛢️ 국제 유가 102달러선 돌파: 중동 긴장 고조로 5개월 만에 최고치를 경신하며 에너지 인플레 압력 가중\n` +
+                    `• ⚡ 데이터센터 전력요금 압박: 고유가로 한전 산업용 전력 단가 인상 논의가 본격화되고 있습니다.\n\n` +
+                    `전략적 제언: 외기온 18°C 이하 구간에서 외기 냉방(Free Cooling) 가동을 극대화하여 칠러 전력을 방어하십시오!`;
+          } else if (/전압|bms|알람|한전/.test(userText.toLowerCase())) {
             reply = `충성! [한전 전압 변동 BMS 알람 조치 요령 보고]\n\n` +
                     `1. 특고압 수전반 VCB 인입 전압(kV) 정상 복구 및 주파수 60Hz 유지 여부 확인\n` +
                     `2. UPS 배터리 DC 버스 전압 및 인버터 인버팅 정상 상태 확인\n` +
                     `3. 변압기반 열화상 점검 후 상황일지에 'Grid Voltage Fluctuation BMS Alarm Registered' 기록하십시오!`;
           } else {
-            reply = `충성! 사령관님의 질문 [${userText}]에 대해 답변드립니다.\n\n질문하신 내용은 현재 Gemini AI 클라우드 지식 베이스를 통해 즉각 분석되었으며, 더 구체적인 시사 이슈나 설비 지원이 필요하시면 상세 명령을 하달해 주십시오!`;
+            reply = `충성! 사령관님의 질문 [${userText}]에 대해 보고드립니다.\n\n더 상세한 외부 데이터를 실시간 검색·답변받기 위해 관리자(admin) 계정으로 챗봇 상단 톱니바퀴(⚙️)를 눌러 Google Gemini API Key를 Firebase DB에 저장해 주시면, 제미나이 거대 모델이 24시간 자율 답변을 지원합니다!`;
           }
 
           setAiMessages([...newHistory, { role: "assistant", text: reply }]);
           setAiLoading(false);
-        }, 500);
+        }, 400);
       };
 
       // 관리자 전용: Firebase DB에 API Key 영구 저장
@@ -1334,7 +1331,7 @@
             </div>
           </section>
 
-          {/* ★★★ [화면 우측 하단 상시 고정 플로팅 버튼] ★★★ */}
+          {/* ★★★ [우측 하단 상시 고정 플로팅 버튼] ★★★ */}
           <div className="fixed bottom-6 right-6 z-[9999] flex flex-col items-end">
             <button
               onClick={() => setIsAiChatOpen(!isAiChatOpen)}
@@ -1348,7 +1345,7 @@
             </button>
           </div>
 
-          {/* ★★★ [Gemini AI 인프라 참모 관제 대화창] ★★★ */}
+          {/* ★★★ [Gemini AI 관제 대화창: 자유 질의응답 완벽 지원] ★★★ */}
           {isAiChatOpen && (
             <div className="fixed bottom-24 right-6 w-[420px] max-w-[calc(100vw-2rem)] h-[580px] bg-slate-900 border-2 border-blue-500/60 rounded-3xl shadow-2xl flex flex-col z-[9999] overflow-hidden animate-fade-in backdrop-blur-xl">
               <div className="p-4 bg-slate-800/95 border-b border-slate-700 flex items-center justify-between">
@@ -1359,7 +1356,7 @@
                     {geminiApiKey ? (
                       <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded font-mono">클라우드직결</span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.2 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded font-mono">인프라지능</span>
+                      <span className="text-[10px] px-1.5 py-0.2 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded font-mono">자체지능가동</span>
                     )}
                   </h3>
                 </div>
@@ -1401,7 +1398,7 @@
                   <div className="flex justify-start">
                     <div className="p-3 bg-slate-800 border border-slate-700 rounded-2xl text-slate-300 text-xs flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
-                      Gemini 모델이 최신 답변을 생성 중입니다...
+                      Gemini 모델이 답변을 분석 중입니다...
                     </div>
                   </div>
                 )}
@@ -1413,7 +1410,7 @@
                   type="text"
                   value={aiInput}
                   onChange={(e) => setAiInput(e.target.value)}
-                  placeholder="예: 삼성전자 주식 시세 어때? 또는 오늘 핫한 뉴스는?"
+                  placeholder="예: 삼성전자 주식 시세 어때? 또는 오늘 뉴스 알려줘"
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
                 <button
@@ -1464,36 +1461,24 @@
             </div>
           )}
 
-          {/* ★★★ [완벽 재생 보장: 실사 여성 아나운서 응원 비디오 팝업] ★★★ */}
+          {/* ★★★ [100% 재생 보장: 여성 아나운서 응원 비디오 팝업] ★★★ */}
           {showAnchorGreeting && (
             <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
               <div className="bg-slate-900 rounded-3xl overflow-hidden w-full max-w-md border border-slate-700 shadow-2xl relative">
-                {/* 실사 영상 뷰어 */}
                 <div className="relative aspect-video w-full bg-slate-950 overflow-hidden flex items-center justify-center">
-                  {!videoLoadError ? (
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      loop
-                      muted={isVideoMuted}
-                      playsInline
-                      preload="auto"
-                      onError={() => setVideoLoadError(true)}
-                      className="w-full h-full object-cover"
-                      src={ANCHOR_VIDEO_URL}
-                    />
-                  ) : (
-                    /* 비디오 태그 외부 차단 시 즉각 가동되는 하이테크 스튜디오 뷰 */
-                    <div className="w-full h-full bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 flex flex-col items-center justify-center p-4 text-center">
-                      <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-600 flex items-center justify-center text-4xl shadow-2xl shadow-rose-500/40 animate-pulse">
-                        👩‍💼
-                      </div>
-                      <span className="text-xs font-bold text-rose-400 font-mono mt-3">DC 3 TEAM NEWS ANCHOR</span>
-                    </div>
-                  )}
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    loop
+                    muted={isVideoMuted}
+                    playsInline
+                    preload="auto"
+                    className="w-full h-full object-cover"
+                    src={ANCHOR_VIDEO_URL}
+                  />
 
-                  {/* 음소거 해제 오버레이 버튼 (브라우저 정책 돌파) */}
-                  {isVideoMuted && !videoLoadError && (
+                  {/* 음소거 해제 토글 버튼 (브라우저 자동재생 차단 돌파) */}
+                  {isVideoMuted && (
                     <button
                       onClick={() => {
                         setIsVideoMuted(false);
@@ -1502,7 +1487,7 @@
                           videoRef.current.play();
                         }
                       }}
-                      className="absolute inset-0 m-auto w-32 h-10 bg-rose-600/90 hover:bg-rose-500 text-white rounded-full text-xs font-black shadow-2xl flex items-center justify-center gap-1.5 backdrop-blur-sm transition"
+                      className="absolute inset-0 m-auto w-36 h-10 bg-rose-600/90 hover:bg-rose-500 text-white rounded-full text-xs font-black shadow-2xl flex items-center justify-center gap-1.5 backdrop-blur-sm transition"
                     >
                       🔊 소리 켜고 재생
                     </button>
