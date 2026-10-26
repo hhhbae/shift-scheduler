@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DCIM TRANSFER MONITORING SYSTEM - ICN66 (SK broadband)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+    body {
+      background-color: #0b0f17;
+      color: #e2e8f0;
+      font-family: 'Noto Sans KR', sans-serif;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* 네온 글로우 효과 */
+    .neon-green-text { color: #10b981; text-shadow: 0 0 8px rgba(16, 185, 129, 0.8); }
+    .neon-yellow-text { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.9); }
+    .neon-red-text { color: #ef4444; text-shadow: 0 0 8px rgba(239, 68, 68, 0.8); }
+
+    .neon-green-box {
+      border-color: #10b981;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.35), inset 0 0 8px rgba(16, 185, 129, 0.2);
+    }
+    .neon-yellow-box {
+      border-color: #fbbf24;
+      box-shadow: 0 0 16px rgba(251, 191, 36, 0.6), inset 0 0 10px rgba(251, 191, 36, 0.25);
+      animation: pulseYellow 1s infinite alternate;
+    }
+    .neon-red-box {
+      border-color: #ef4444;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.35), inset 0 0 8px rgba(239, 68, 68, 0.2);
+    }
+
+    .line-green {
+      background-color: #10b981;
+      box-shadow: 0 0 10px #10b981, 0 0 20px rgba(16, 185, 129, 0.6);
+    }
+    .line-yellow {
+      background-color: #fbbf24;
+      box-shadow: 0 0 12px #fbbf24, 0 0 24px rgba(251, 191, 36, 0.8);
+      animation: pulseYellow 0.8s infinite alternate;
+    }
+    .line-red {
+      background-color: #ef4444;
+      box-shadow: 0 0 10px #ef4444, 0 0 20px rgba(239, 68, 68, 0.6);
+    }
+    .line-dim { background-color: #1e293b; }
+
+    @keyframes pulseYellow {
+      0% { opacity: 0.65; filter: brightness(0.9); }
+      100% { opacity: 1; filter: brightness(1.3); }
+    }
+
+    /* 화살표 스타일 */
+    .arrow-down-green {
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 8px solid #10b981;
+      filter: drop-shadow(0 0 6px #10b981);
+    }
+    .arrow-down-yellow {
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 8px solid #fbbf24;
+      filter: drop-shadow(0 0 8px #fbbf24);
+    }
+    .arrow-down-red {
+      width: 0; height: 0;
+      border-left: 6px solid transparent;
+      border-right: 6px solid transparent;
+      border-top: 8px solid #ef4444;
+      filter: drop-shadow(0 0 6px #ef4444);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col select-none">
+
+  <!-- 상단 타이틀 바 -->
+  <header class="h-12 bg-[#111827] border-b border-slate-800 px-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <span class="text-slate-400 text-lg">☰</span>
+      <h1 class="text-sm md:text-base font-bold tracking-wider text-slate-200">DCIM TRANSFER MONITORING SYSTEM</h1>
+    </div>
+    <div class="text-sm md:text-base font-semibold text-slate-300 tracking-wide">
+      ICN66 (SK broadband) <span class="text-xs text-emerald-400 ml-2 mono">[UID383 / N+C+M]</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="openJsonModal()" class="px-2.5 py-1 rounded bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700 text-xs font-bold transition">
+        🔌 데이터 연동 (JSON)
+      </button>
+      <a href="/index.html" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-bold transition">
+        📅 교대근무표 복귀
+      </a>
+    </div>
+  </header>
+
+  <!-- 메인 관제 레이아웃 -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+
+    <!-- 좌측/중앙: 단선도(SLD) 및 타임라인 영역 -->
+    <div class="flex-1 p-4 md:p-6 flex flex-col justify-between relative overflow-x-auto">
+
+      <!-- 상단 상태 박스 + 시뮬레이션 컨트롤러 -->
+      <div class="flex flex-wrap items-start justify-between gap-4 mb-4">
+        <!-- OPERATION STATUS 박스 (첫 번째 시안 좌측 상단 그대로 재현) -->
+        <div class="bg-[#131b26] border border-slate-700/80 rounded-lg p-3.5 w-80 shadow-lg">
+          <div class="text-xs font-bold text-slate-400 tracking-wider mb-1">OPERATION STATUS</div>
+          <div class="flex items-center justify-between text-xs font-bold mb-1.5">
+            <span id="opStatusText" class="text-emerald-400">Utility Restoration (복전 진행 중)</span>
+            <span id="opStatusPct" class="mono text-slate-300">100%</span>
+          </div>
+          <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden mb-2">
+            <div id="stabilizationBar" class="h-full line-green transition-all duration-300" style="width: 100%"></div>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-slate-300 mono">
+            <span>Stabilization Time:</span>
+            <span id="stabilizationTimerText">20:00 / 20:00 (완료)</span>
+          </div>
+        </div>
+
+        <!-- 인터록 & 시뮬레이션 제어 패널 -->
+        <div class="bg-[#131b26] border border-slate-700/80 rounded-lg p-3 flex flex-wrap items-center gap-2 shadow-lg">
+          <div class="text-xs font-bold text-slate-400 mr-2">시나리오 테스트:</div>
+          <button onclick="setScenario('initial_demo')" class="px-2.5 py-1.5 rounded bg-amber-500/20 border border-amber-500 text-amber-300 text-xs font-bold hover:bg-amber-500/30">
+            ⚡ 시안 화면 (D 절체중)
+          </button>
+          <button onclick="setScenario('outage')" class="px-2.5 py-1.5 rounded bg-red-500/20 border border-red-500 text-red-300 text-xs font-bold hover:bg-red-500/30">
+            🚨 1. 정전 발생 (발전기 운전)
+          </button>
+          <button onclick="setScenario('stabilizing')" class="px-2.5 py-1.5 rounded bg-blue-500/20 border border-blue-500 text-blue-300 text-xs font-bold hover:bg-blue-500/30">
+            ⏳ 2. 복전 대기 (20분 타이머)
+          </button>
+          <button onclick="startAutoSequence()" class="px-2.5 py-1.5 rounded bg-emerald-500/20 border border-emerald-500 text-emerald-300 text-xs font-bold hover:bg-emerald-500/30">
+            ▶️ 3. 순차절체 연속재생 (배속)
+          </button>
+          <button onclick="setScenario('normal')" class="px-2.5 py-1.5 rounded bg-slate-700 border border-slate-600 text-slate-200 text-xs font-bold hover:bg-slate-600">
+            ✅ 4. 전 라인 한전 복귀완료
+          </button>
+        </div>
+      </div>
+
+      <!-- 중앙: 11개 라인업 단선도 (Single-Line Diagram) -->
+      <div class="my-auto py-4 min-w-[980px]">
+        <div id="sldGrid" class="grid grid-cols-11 gap-2 relative pt-6">
+          <!-- JS에서 C2, C1, A ~ I 11개 컬럼을 첫 번째 이미지와 동일한 구조로 렌더링합니다 -->
+        </div>
+      </div>
+
+      <!-- 하단: Power Flow & 순차 절체 타임라인 바 -->
+      <div class="mt-4 pt-3 border-t border-slate-800/80 min-w-[980px]">
+        <div class="flex items-center justify-between text-xs text-slate-400 mb-2 px-16">
+          <span class="font-semibold text-slate-300">Power Flow (절체 완료 구간)</span>
+          <span class="font-semibold text-amber-400">순차 절체 (Sequential Transfer every 30sec)</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-bold text-slate-300 w-16">Timeline</span>
+          <div id="timelineContainer" class="flex-1 grid grid-cols-11 gap-1.5 bg-[#131b26] p-2 rounded-lg border border-slate-800">
+            <!-- JS에서 11개 타임라인 세그먼트 렌더링 -->
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 우측: SYSTEM ALERTS & LOGS -->
+    <aside class="w-full lg:w-80 bg-[#111827] border-t lg:border-t-0 lg:border-l border-slate-800 p-4 flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+          <h2 class="text-xs font-bold tracking-wider text-slate-300">SYSTEM ALERTS & LOGS</h2>
+          <span class="px-2 py-0.5 text-[10px] rounded bg-emerald-950 text-emerald-400 border border-emerald-700/60 mono">Gen ACB: MANUAL(고정)</span>
+        </div>
+        <div id="logList" class="space-y-2 text-xs mono max-h-[420px] overflow-y-auto pr-1">
+          <!-- 로그 항목 렌더링 -->
+        </div>
+      </div>
+
+      <!-- 하단 P5 보호계전기 / T300 엔지니어링 요약 -->
+      <div class="mt-4 bg-[#0b0f17] border border-slate-800 rounded p-3 text-[11px] text-slate-400 space-y-1">
+        <div class="text-slate-200 font-bold mb-1">⚙️ 하드웨어 설정 요약 (UID383)</div>
+        <div>• <span class="text-slate-300">냉각수 안정화 대기:</span> 20분 (1,200s)</div>
+        <div>• <span class="text-slate-300">T300 ATS 순차절체:</span> 20m30s ~ 25m30s (30초 간격)</div>
+        <div>• <span class="text-slate-300">P5 발전기 OFF-Delay:</span> 절체 후 +5분 무부하 운전(25m30s~30m30s)</div>
+        <div>• <span class="text-slate-300">Catcher 1 (N+C+M):</span> 자동절체 삭제 → 수동(Manual) 전환</div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- JSON 데이터 주입 모달 -->
+  <div id="jsonModal" class="fixed inset-0 bg-black/75 hidden items-center justify-center z-50 p-4">
+    <div class="bg-[#131b26] border border-slate-700 rounded-xl max-w-2xl w-full p-5 shadow-2xl">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-bold text-slate-200">🔌 실시간 관제 JSON 데이터 주입 (window.updateDCIMData)</h3>
+        <button onclick="closeJsonModal()" class="text-slate-400 hover:text-white text-lg">&times;</button>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">
+        외부 API나 WebSocket, Modbus 게이트웨이에서 아래와 같은 JSON 배열만 넘겨주면 화면의 모든 스위치, 네온 라인, 타이머가 즉시 구동됩니다. 값을 직접 수정하고 [적용하기]를 눌러보세요.
+      </p>
+      <textarea id="jsonInput" class="w-full h-72 bg-[#0b0f17] border border-slate-700 rounded p-3 text-xs mono text-emerald-300 focus:outline-none"></textarea>
+      <div class="flex justify-end gap-2 mt-3">
+        <button onclick="closeJsonModal()" class="px-3 py-1.5 rounded bg-slate-800 text-slate-300 text-xs font-bold">닫기</button>
+        <button onclick="applyJsonInput()" class="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">적용하기</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 11개 라인업 기본 정의 (복전 후 순차 절체 지연 시간: C2 +30s ~ I +330s)
+    const LINEUP_IDS = ['C2', 'C1', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+    let autoTimer = null;
+
+    // 현재 DCIM 화면 상태 (첫 번째 시안 이미지 상태를 초기값으로 설정)
+    let dcimState = {
+      opStatusText: "Utility Restoration (복전 진행 중)",
+      stabilizationPct: 100,
+      stabilizationTimerText: "12:45 / 20:00 (진행 중)",
+      lineups: [
+        { id: 'C2', status: 'UTILITY', delaySec: 30 },
+        { id: 'C1', status: 'UTILITY', delaySec: 60 },
+        { id: 'A',  status: 'UTILITY', delaySec: 90 },
+        { id: 'B',  status: 'UTILITY', delaySec: 120 },
+        { id: 'C',  status: 'UTILITY', delaySec: 150 },
+        { id: 'D',  status: 'TRANSFERRING', delaySec: 120 }, // 시안 이미지처럼 D 라인 절체 중
+        { id: 'E',  status: 'GENERATOR', delaySec: 150 },
+        { id: 'F',  status: 'GENERATOR', delaySec: 180 },
+        { id: 'G',  status: 'GENERATOR', delaySec: 210 },
+        { id: 'H',  status: 'GENERATOR', delaySec: 240 },
+        { id: 'I',  status: 'GENERATOR', delaySec: 270 }
+      ],
+      logs: [
+        "09:20:15 - Utility Restored (한전 전원 복구 감지)",
+        "09:20:16 - Stabilization Timer Started (20min 냉각 안정화 대기)",
+        "09:40:16 - Sequential Transfer Started (30초 간격 순차 절체 개시)",
+        "09:40:46 - Line-up C2, C1, A, B, C Transfer Complete (한전 투입)",
+        "09:41:46 - Line-up D Transferring... (ATS 절체 동작 중)"
+      ]
+    };
+
+    // 외부에서 데이터만 던져주면 즉시 화면을 갱신하는 전역 함수
+    window.updateDCIMData = function(newState) {
+      dcimState = { ...dcimState, ...newState };
+      renderDCIM();
+    };
+
+    function renderDCIM() {
+      // 1. 상단 Operation Status 업데이트
+      document.getElementById('opStatusText').textContent = dcimState.opStatusText;
+      document.getElementById('opStatusPct').textContent = dcimState.stabilizationPct + '%';
+      document.getElementById('stabilizationBar').style.width = dcimState.stabilizationPct + '%';
+      document.getElementById('stabilizationTimerText').textContent = dcimState.stabilizationTimerText;
+
+      // 2. 중앙 11개 라인업 단선도(SLD) 렌더링
+      const sldGrid = document.getElementById('sldGrid');
+      sldGrid.innerHTML = dcimState.lineups.map((item, idx) => {
+        const isUtil = item.status === 'UTILITY';
+        const isTrans = item.status === 'TRANSFERRING';
+        const isGen = item.status === 'GENERATOR';
+
+        const colorTitle = isUtil ? 'neon-green-text' : (isTrans ? 'neon-yellow-text' : 'neon-red-text');
+        const boxClass = isUtil ? 'neon-green-box' : (isTrans ? 'neon-yellow-box' : 'neon-red-box');
+        const topLineClass = isUtil ? 'line-green' : (isTrans ? 'line-yellow' : 'line-dim');
+        const bottomLineClass = isUtil ? 'line-green' : (isTrans ? 'line-yellow' : 'line-red');
+        const arrowClass = isUtil ? 'arrow-down-green' : (isTrans ? 'arrow-down-yellow' : 'arrow-down-red');
+
+        const statusLabel = isUtil ? 'UTILITY ACTIVE' : (isTrans ? 'TRANSFERRING' : 'ON GENERATOR');
+        const subLabel = isUtil ? '(한전 수전 완료)' : (isTrans ? '(절체 스위칭 중)' : '(발전기 비상운전)');
+
+        // 시안 이미지처럼 절체 중인 라인 위에 "┌ ATS(수직 전환 스위치)" 콜아웃 표시
+        const atsCallout = isTrans ? `
+          <div class="absolute -top-6 left-1/2 -translate-x-2 whitespace-nowrap text-[11px] text-slate-200 font-semibold z-20">
+            ┌ ATS(수직 전환 스위치)
+          </div>
+        ` : '';
+
+        // 좌측 첫 번째 컬럼에 Utility(한전) / Generator(발전기) 라벨 표시
+        const leftBusLabelUtil = idx === 0 ? `<span class="absolute -left-2 top-8 z-20 bg-[#0b0f17]/90 px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-200 border border-slate-700">Utility(한전)</span>` : '';
+        const leftBusLabelGen  = idx === 0 ? `<span class="absolute -left-2 bottom-20 z-20 bg-[#0b0f17]/90 px-1.5 py-0.5 rounded text-[11px] font-bold text-slate-200 border border-slate-700">Generator(발전기)</span>` : '';
+
+        return `
+          <div class="flex flex-col items-center relative">
+            ${atsCallout}
+            ${leftBusLabelUtil}
+            ${leftBusLabelGen}
+
+            <!-- 상단 라인업 이름 (C2 ~ I) -->
+            <div class="text-sm font-bold mb-2 mono ${colorTitle}">${item.id}</div>
+
+            <!-- 상단 Utility 수평 모선 & 분기 박스 -->
+            <div class="w-full h-9 bg-[#151e2d] border border-slate-700/80 rounded flex items-center justify-center relative overflow-hidden">
+              <div class="w-full h-1 ${topLineClass}"></div>
+            </div>
+
+            <!-- 상단 수직 전력선 + 지연 시간 표시 -->
+            <div class="h-16 flex flex-col items-center justify-center relative">
+              <div class="w-1 flex-1 ${isGen ? 'line-red' : topLineClass}"></div>
+              ${!isUtil ? `<span class="my-1 text-xs font-bold mono ${colorTitle}">+${item.delaySec}s</span>` : `<div class="${arrowClass} my-1"></div>`}
+              <div class="w-1 flex-1 ${isGen ? 'line-red' : topLineClass}"></div>
+            </div>
+
+            <!-- 중앙 ATS 스위치 박스 (클릭 시 상태 수동 토글 가능) -->
+            <div onclick="cycleLineupStatus(${idx})" title="클릭하여 상태 변경 테스트"
+                 class="w-16 h-20 rounded-lg bg-[#111827] border-2 ${boxClass} flex flex-col items-center justify-center cursor-pointer transition-transform hover:scale-105 relative">
+              <!-- 스위치 접점 그래픽 -->
+              <div class="w-2 h-2 rounded-full ${isUtil ? 'bg-emerald-400' : (isTrans ? 'bg-amber-400' : 'bg-red-500')} mb-1"></div>
+              <div class="w-0.5 h-8 ${isUtil ? 'bg-emerald-400' : (isTrans ? 'bg-amber-400 rotate-12' : 'bg-red-500 -rotate-12')} transition-transform"></div>
+              <div class="w-2 h-2 rounded-full border border-slate-400 mt-1"></div>
+            </div>
+
+            <!-- ATS 상태 텍스트 -->
+            <div class="mt-2 text-center">
+              <div class="text-[10px] font-bold tracking-tight mono ${colorTitle}">${statusLabel}</div>
+              <div class="text-[9px] text-slate-400">${subLabel}</div>
+            </div>
+
+            <!-- 하단 수직 전력선 -->
+            <div class="h-12 flex flex-col items-center">
+              <div class="w-1 flex-1 ${bottomLineClass}"></div>
+              <div class="${arrowClass}"></div>
+            </div>
+
+            <!-- 하단 Generator 수평 바 -->
+            <div class="w-full h-1.5 ${bottomLineClass} rounded my-1"></div>
+
+            <!-- 하단 발전기/부하 아이콘 박스 -->
+            <div class="h-6 w-0.5 ${bottomLineClass}"></div>
+            <div class="w-14 h-12 rounded-lg bg-[#111827] border ${boxClass} flex flex-col items-center justify-center">
+              <span class="text-xs font-bold mono ${colorTitle}">⚡GEN</span>
+              <span class="text-[9px] text-slate-400 mono">${isUtil ? 'STOP/COOL' : 'RUNNING'}</span>
+            </div>
+
+            <!-- 하단 라인업 라벨 -->
+            <div class="mt-2 text-xs font-bold mono ${colorTitle}">${item.id}</div>
+          </div>
+        `;
+      }).join('');
+
+      // 3. 하단 Timeline 렌더링
+      const timelineContainer = document.getElementById('timelineContainer');
+      timelineContainer.innerHTML = dcimState.lineups.map(item => {
+        const isUtil = item.status === 'UTILITY';
+        const isTrans = item.status === 'TRANSFERRING';
+        const badgeText = isUtil ? `${item.id}: 완료` : (isTrans ? `${item.id}: 진행중 (${item.delaySec}s)` : `${item.id}: 대기 (+${item.delaySec}s)`);
+        const barColor = isUtil ? 'line-green' : (isTrans ? 'line-yellow w-2/3' : 'bg-slate-800 w-0');
+        const textColor = isUtil ? 'text-emerald-400' : (isTrans ? 'text-amber-300' : 'text-slate-500');
+
+        return `
+          <div class="flex flex-col">
+            <span class="text-[10px] font-bold mono mb-1 truncate ${textColor}">${badgeText}</span>
+            <div class="w-full h-3 bg-slate-900 rounded overflow-hidden border border-slate-800">
+              <div class="h-full ${barColor} transition-all duration-300"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 4. 우측 로그 렌더링
+      const logList = document.getElementById('logList');
+      logList.innerHTML = dcimState.logs.map((log, i) => {
+        const isLatest = i === dcimState.logs.length - 1;
+        return `<div class="${isLatest ? 'text-amber-300 font-bold' : 'text-slate-400'} leading-relaxed">${log}</div>`;
+      }).join('');
+    }
+
+    // 개별 스위치 클릭 시 상태 수동 순환 (UTILITY -> TRANSFERRING -> GENERATOR)
+    function cycleLineupStatus(idx) {
+      const order = ['UTILITY', 'TRANSFERRING', 'GENERATOR'];
+      const current = dcimState.lineups[idx].status;
+      const next = order[(order.indexOf(current) + 1) % order.length];
+      dcimState.lineups[idx].status = next;
+      const now = new Date().toTimeString().split(' ')[0];
+      dcimState.logs.push(`${now} - [수동 테스트] Line-up ${dcimState.lineups[idx].id} 상태 변경: ${next}`);
+      renderDCIM();
+    }
+
+    // 시나리오 프리셋 전환
+    function setScenario(mode) {
+      if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+      const now = new Date().toTimeString().split(' ')[0];
+
+      if (mode === 'initial_demo') {
+        dcimState.opStatusText = "Utility Restoration (복전 진행 중)";
+        dcimState.stabilizationPct = 100;
+        dcimState.stabilizationTimerText = "20:00 / 20:00 (안정화 완료)";
+        dcimState.lineups = LINEUP_IDS.map((id, i) => ({
+          id,
+          status: i < 5 ? 'UTILITY' : (i === 5 ? 'TRANSFERRING' : 'GENERATOR'),
+          delaySec: (i + 1) * 30
+        }));
+        dcimState.logs.push(`${now} - 시안 화면(Line-up D 절체 중) 상태 로드 완료`);
+      } else if (mode === 'outage') {
+        dcimState.opStatusText = "Blackout - On Generator (비상발전기 운전 중)";
+        dcimState.stabilizationPct = 0;
+        dcimState.stabilizationTimerText = "00:00 / 20:00 (한전 복전 대기)";
+        dcimState.lineups = LINEUP_IDS.map((id, i) => ({ id, status: 'GENERATOR', delaySec: (i + 1) * 30 }));
+        dcimState.logs.push(`${now} - [경보] 한전 정전 발생! 15초 후 전 라인 비상발전기(Gen) 절체 완료`);
+      } else if (mode === 'stabilizing') {
+        dcimState.opStatusText = "Cooling Stabilization (냉각수 20분 안정화 대기 중)";
+        dcimState.stabilizationPct = 65;
+        dcimState.stabilizationTimerText = "13:00 / 20:00 (진행 중)";
+        dcimState.lineups = LINEUP_IDS.map((id, i) => ({ id, status: 'GENERATOR', delaySec: (i + 1) * 30 }));
+        dcimState.logs.push(`${now} - 한전 복전 감지! 냉각수(Buffer Tank) 안정화를 위해 20분 대기 타이머 작동 중`);
+      } else if (mode === 'normal') {
+        dcimState.opStatusText = "All Utility Active (전 라인 한전 복귀 완료)";
+        dcimState.stabilizationPct = 100;
+        dcimState.stabilizationTimerText = "20:00 / 20:00 (완료)";
+        dcimState.lineups = LINEUP_IDS.map((id, i) => ({ id, status: 'UTILITY', delaySec: (i + 1) * 30 }));
+        dcimState.logs.push(`${now} - 전 라인업(C2~I) 한전 순차 절체 완료 (발전기 5분 무부하 냉각 후 정지)`);
+      }
+      renderDCIM();
+    }
+
+    // 30초 순차 절체 연속 애니메이션 재생
+    function startAutoSequence() {
+      if (autoTimer) clearInterval(autoTimer);
+      let step = 0;
+      dcimState.opStatusText = "Sequential Transfer Active (30초 간격 순차 절체 중)";
+      dcimState.stabilizationPct = 100;
+      dcimState.stabilizationTimerText = "20:00 / 20:00 (완료)";
+
+      const runStep = () => {
+        const now = new Date().toTimeString().split(' ')[0];
+        if (step < LINEUP_IDS.length) {
+          dcimState.lineups = LINEUP_IDS.map((id, i) => ({
+            id,
+            status: i < step ? 'UTILITY' : (i === step ? 'TRANSFERRING' : 'GENERATOR'),
+            delaySec: (i + 1) * 30
+          }));
+          dcimState.logs.push(`${now} - Line-up ${LINEUP_IDS[step]} (+${(step + 1) * 30}s) 절체 진행 중...`);
+          renderDCIM();
+          step++;
+        } else {
+          setScenario('normal');
+          clearInterval(autoTimer);
+          autoTimer = null;
+        }
+      };
+
+      runStep();
+      autoTimer = setInterval(runStep, 1200); // 1.2초마다 한 라인씩 절체 시연
+    }
+
+    // JSON 모달 제어
+    function openJsonModal() {
+      document.getElementById('jsonInput').value = JSON.stringify(dcimState, null, 2);
+      document.getElementById('jsonModal').classList.remove('hidden');
+      document.getElementById('jsonModal').classList.add('flex');
+    }
+    function closeJsonModal() {
+      document.getElementById('jsonModal').classList.add('hidden');
+      document.getElementById('jsonModal').classList.remove('flex');
+    }
+    function applyJsonInput() {
+      try {
+        const parsed = JSON.parse(document.getElementById('jsonInput').value);
+        window.updateDCIMData(parsed);
+        closeJsonModal();
+      } catch (e) {
+        alert('JSON 형식이 올바르지 않습니다: ' + e.message);
+      }
+    }
+
+    // 초기 렌더링 실행
+    renderDCIM();
+  </script>
+</body>
+</html>
